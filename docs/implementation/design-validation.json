@@ -1,0 +1,103 @@
+{
+  "specVersion": "1.0.0",
+  "checksPassed": 6,
+  "checks": [
+    "approved rule constants",
+    "engine assets and timing",
+    "work dependencies and 38 acceptance cases",
+    "all local Markdown links",
+    "map symmetry and item anchors",
+    "spawn paths and initial sightlines"
+  ],
+  "workPackages": 12,
+  "acceptanceDefinitions": 38,
+  "spawnShortestWalkingDistances": [
+    [
+      0,
+      16,
+      26,
+      36,
+      41,
+      50
+    ],
+    [
+      16,
+      0,
+      16,
+      41,
+      37,
+      41
+    ],
+    [
+      26,
+      16,
+      0,
+      50,
+      41,
+      36
+    ],
+    [
+      36,
+      41,
+      50,
+      0,
+      16,
+      26
+    ],
+    [
+      41,
+      37,
+      41,
+      16,
+      0,
+      16
+    ],
+    [
+      50,
+      41,
+      36,
+      26,
+      16,
+      0
+    ]
+  ],
+  "allowedOpponents": [
+    [
+      2,
+      3,
+      4,
+      5
+    ],
+    [
+      3,
+      4,
+      5
+    ],
+    [
+      0,
+      3,
+      4,
+      5
+    ],
+    [
+      0,
+      1,
+      2,
+      5
+    ],
+    [
+      0,
+      1,
+      2
+    ],
+    [
+      0,
+      1,
+      2,
+      3
+    ]
+  ],
+  "limits": [
+    "Static design validation only; no Godot physics, game, NAT or realtime recovery executed."
+  ]
+}

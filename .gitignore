@@ -4,6 +4,10 @@ node_modules/
 build/
 dist/
 coverage/
+artifacts/
+tools/cache/
+tools/godot/
+tools/templates/
 
 # Local credentials and temporary files
 .env

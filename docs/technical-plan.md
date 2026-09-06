@@ -102,6 +102,8 @@ agent-reachのJina Readerはネットワーク接続に失敗したため、Web�
 
 ## 8. 現在の到達点
 
+現行の実装指示書は[実装仕様v1.0](implementation/README.md)。固定版、ファイル/API、通信/復元、製品画面/配布、12作業単位と38受入項目を定義した。既存の17試験に加え、設計の値/依存/参照/マップを静的検査するvalidatorを追加した。ゲーム実装の完了とは区別する。
+
 2026-09-06追記: [詳細設計初稿](detailed-design-v0.1.md) → Node.jsによる通信・復元の小規模試作 → [詳細設計v0.2](detailed-design.md) への更新まで完了。
 
 17試験で実UDP loopback、2プロセス間の確定履歴同期、保存ACK、ホスト/ゲスト強制終了後の復元、保存途中終了、重複敗北防止、履歴分岐時の停止を確認した。[検証結果と制限](technical-validation.md)、[実行ログ](spike-test-results.tap)。
