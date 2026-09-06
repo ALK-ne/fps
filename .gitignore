@@ -1,0 +1,17 @@
+# Dependencies and generated outputs
+node_modules/
+.godot/
+build/
+dist/
+coverage/
+
+# Local credentials and temporary files
+.env
+.env.*
+!.env.example
+*.tmp
+*.log
+
+# OS metadata
+Thumbs.db
+.DS_Store

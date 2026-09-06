@@ -1,0 +1,113 @@
+TAP version 13
+# Subtest: 履歴照合: 長い共通履歴へ進み、古い記録で巻き戻らない
+ok 1 - 履歴照合: 長い共通履歴へ進み、古い記録で巻き戻らない
+  ---
+  duration_ms: 2.0774
+  type: 'test'
+  ...
+# Subtest: 同世代/異世代の分岐、改ざん、異なる試合を拒否
+ok 2 - 同世代/異世代の分岐、改ざん、異なる試合を拒否
+  ---
+  duration_ms: 0.783
+  type: 'test'
+  ...
+# Subtest: 復帰ペナルティは一回だけ、通常決着後・次ラウンドへの古い要求も無効
+ok 3 - 復帰ペナルティは一回だけ、通常決着後・次ラウンドへの古い要求も無効
+  ---
+  duration_ms: 0.8689
+  type: 'test'
+  ...
+# Subtest: 60秒境界は期限切れ、期限は再試行で延長しない
+ok 4 - 60秒境界は期限切れ、期限は再試行で延長しない
+  ---
+  duration_ms: 0.4205
+  type: 'test'
+  ...
+# Subtest: 切断復帰の得点で10勝に到達したら終了
+ok 5 - 切断復帰の得点で10勝に到達したら終了
+  ---
+  duration_ms: 2.2289
+  type: 'test'
+  ...
+# Subtest: 引き分けは得点なしでラウンド進行
+ok 6 - 引き分けは得点なしでラウンド進行
+  ---
+  duration_ms: 0.2185
+  type: 'test'
+  ...
+# Subtest: 通信断だけの責任判定と両者再起動は保留
+ok 7 - 通信断だけの責任判定と両者再起動は保留
+  ---
+  duration_ms: 0.1556
+  type: 'test'
+  ...
+# Subtest: 実UDP: 損失・重複・遅延による並べ替えから収束
+ok 8 - 実UDP: 損失・重複・遅延による並べ替えから収束
+  ---
+  duration_ms: 318.3141
+  type: 'test'
+  ...
+# {"host":{"tx":8,"rx":7,"dropped":1},"guest":{"tx":7,"rx":7,"dropped":1}}
+# Subtest: 実UDP: ACK消失中は次ラウンド開始を拒否、再接続後に進行
+ok 9 - 実UDP: ACK消失中は次ラウンド開始を拒否、再接続後に進行
+  ---
+  duration_ms: 624.9204
+  type: 'test'
+  ...
+# Subtest: 実プロセス: ホスト強制終了→再起動→復帰敗北を一回だけ保存
+ok 10 - 実プロセス: ホスト強制終了→再起動→復帰敗北を一回だけ保存
+  ---
+  duration_ms: 407.8598
+  type: 'test'
+  ...
+# Subtest: 実プロセス: ゲスト強制終了→再接続でゲストの敗北
+ok 11 - 実プロセス: ゲスト強制終了→再接続でゲストの敗北
+  ---
+  duration_ms: 373.3466
+  type: 'test'
+  ...
+# Subtest: 実ファイル: 保存partialでプロセス終了し、旧/新の完全な状態へ復元
+ok 12 - 実ファイル: 保存partialでプロセス終了し、旧/新の完全な状態へ復元
+  ---
+  duration_ms: 377.1735
+  type: 'test'
+  ...
+# Subtest: 実ファイル: 保存beforeRenameでプロセス終了し、旧/新の完全な状態へ復元
+ok 13 - 実ファイル: 保存beforeRenameでプロセス終了し、旧/新の完全な状態へ復元
+  ---
+  duration_ms: 386.8949
+  type: 'test'
+  ...
+# Subtest: 実ファイル: 保存afterRenameでプロセス終了し、旧/新の完全な状態へ復元
+ok 14 - 実ファイル: 保存afterRenameでプロセス終了し、旧/新の完全な状態へ復元
+  ---
+  duration_ms: 407.5672
+  type: 'test'
+  ...
+# Subtest: 実UDP: ゲストだけが新しい完全履歴を持つ場合にホストを修復
+ok 15 - 実UDP: ゲストだけが新しい完全履歴を持つ場合にホストを修復
+  ---
+  duration_ms: 379.8834
+  type: 'test'
+  ...
+# Subtest: 実ファイル: 本体破損は拒否し、一時ファイルを勝手に確定扱いしない
+ok 16 - 実ファイル: 本体破損は拒否し、一時ファイルを勝手に確定扱いしない
+  ---
+  duration_ms: 220.4088
+  type: 'test'
+  ...
+# Subtest: 実UDP: 分岐履歴を受け取ると得点操作を停止する
+ok 17 - 実UDP: 分岐履歴を受け取ると得点操作を停止する
+  ---
+  duration_ms: 404.9701
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3999.5179
