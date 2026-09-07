@@ -19,3 +19,6 @@ tools/templates/
 # OS metadata
 Thumbs.db
 .DS_Store
+
+release/
+game/export_presets.cfg

@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "specVersion": "1.0.0",
+  "engine": {
+    "version": "4.7.2-stable", "renderer": "gl_compatibility", "physics": "GodotPhysics3D",
+    "platform": "windows-x86_64", "language": "GDScript",
+    "editorAsset": "Godot_v4.7.2-stable_win64.exe.zip",
+    "editorSha256": "731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953",
+    "templateAsset": "Godot_v4.7.2-stable_export_templates.tpz",
+    "templateSha256": "f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011"
+  },
+  "match": { "wins": 10, "fightMs": 90000, "selectionMs": 10000, "countdownMs": 3000, "recoveryMs": 60000, "hp": 100, "armorBands": [[1, 50], [4, 75], [8, 100], [12, 125]] },
+  "simulation": { "hz": 60, "snapshotHz": 20, "healthScale": 1000, "maxCatchupTicks": 4, "stallSuspendMs": 250, "maxProjectiles": 128, "maxGrenades": 4, "maxFlames": 8 },
+  "movement": { "walk": 6, "sprint": 10, "crouch": 3, "groundAccel": 35, "brake": 30, "airAccel": 8, "gravity": 24, "jumpSpeed": 8, "radius": 0.35, "standingHeight": 1.8, "crouchHeight": 1.15, "eyeHeight": 1.62, "slideSpeed": 11, "slideMs": 700, "slideBrake": 5, "vaultMinHeight": 0.5, "vaultMaxHeight": 1.2, "vaultMs": 300, "vaultReach": 1.0, "vaultMaxDepth": 1.2, "slopeDegrees": 45 },
+  "weapons": [
+    { "id": 1, "name": "rifle", "damage": 15, "pellets": 1, "intervalUs": 110000, "bulletSpeed": 140, "magazine": 24, "ammoBox": 24, "reserveCap": 120, "reloadMs": 1800, "hipDegrees": 1.8, "adsDegrees": 0.25, "headMultiplier": 1.5, "recoilDegrees": 0.6, "automatic": true },
+    { "id": 2, "name": "shotgun", "damage": 10, "pellets": 8, "intervalUs": 850000, "bulletSpeed": 100, "magazine": 6, "ammoBox": 6, "reserveCap": 30, "reloadMs": 2500, "hipDegrees": 5, "adsDegrees": 3, "headMultiplier": 1.25, "recoilDegrees": 2.5, "automatic": false },
+    { "id": 3, "name": "pistol", "damage": 24, "pellets": 1, "intervalUs": 280000, "bulletSpeed": 120, "magazine": 12, "ammoBox": 12, "reserveCap": 60, "reloadMs": 1400, "hipDegrees": 1.2, "adsDegrees": 0.2, "headMultiplier": 1.5, "recoilDegrees": 1.2, "automatic": false }
+  ],
+  "combat": { "bulletLifetimeMs": 2000, "airHipMultiplier": 2, "adsMoveMultiplier": 0.7, "adsFovMultiplier": 0.8, "adsBlendMs": 120, "weaponSwitchMs": 250, "pickupDistance": 2, "swapHoldMs": 1000, "meleeDistance": 1.5, "meleeConeDegrees": 60, "meleeCooldownMs": 700, "meleeDeltaSpeed": 5, "recoilReturnDegreesPerSecond": 6, "recoilYawRatio": 0.2 },
+  "heals": [
+    { "id": 1, "name": "health_small", "key": "5", "target": "hp", "amount": 25, "full": false, "useMs": 3750, "cap": 4 },
+    { "id": 2, "name": "health_full", "key": "6", "target": "hp", "amount": 0, "full": true, "useMs": 6250, "cap": 2 },
+    { "id": 3, "name": "armor_small", "key": "7", "target": "armor", "amount": 25, "full": false, "useMs": 3000, "cap": 4 },
+    { "id": 4, "name": "armor_full", "key": "8", "target": "armor", "amount": 0, "full": true, "useMs": 5000, "cap": 2 }
+  ],
+  "grenades": { "totalCap": 2, "selfDamageMultiplier": 0.5, "radius": 0.1, "gravity": 16, "frag": { "speed": 16, "bounce": 0.45, "fuseMs": 2500, "radius": 4, "damage": 100 }, "incendiary": { "speed": 14, "groundSearch": 5, "radius": 2.5, "durationMs": 5000, "periodMs": 250, "damagePerPeriod": 8 } },
+  "network": { "portMin": 27840, "portMax": 27849, "channels": 4, "maxPacketBytes": 1200, "maxMessageBytes": 32768, "heartbeatMs": 500, "suspendAfterMs": 2000, "neutralInputAfterMs": 100, "connectTimeoutMs": 8000, "authenticationTimeoutMs": 3000, "retryMs": 500, "maxHistoryChunkBytes": 8192, "interpolationMs": 100, "maxExtrapolationMs": 100, "inputRingSize": 256, "maxPacketsPerSecond": 240, "maxBytesPerSecond": 131072 },
+  "settings": { "sensitivityDegreesPerPixel": 0.08, "adsSensitivityMultiplier": 0.65, "verticalFov": 75, "masterVolume": 0.8, "sfxVolume": 1, "resolution": [1920, 1080], "windowMode": "borderless", "quality": "medium", "fpsCap": 120, "adsToggle": false, "crouchToggle": false, "wheelHoldMs": 200 },
+  "tasks": [
+    { "id": "W01", "depends": [], "acceptance": ["A01"] },
+    { "id": "W02", "depends": ["W01"], "acceptance": ["A02", "A03"] },
+    { "id": "W03", "depends": ["W02"], "acceptance": ["A04", "A05", "A06"] },
+    { "id": "W04", "depends": ["W02"], "acceptance": ["A07", "A08"] },
+    { "id": "W05", "depends": ["W03", "W04"], "acceptance": ["A09", "A10", "A11", "A12"] },
+    { "id": "W06", "depends": ["W05"], "acceptance": ["A13", "A14", "A15", "A16"] },
+    { "id": "W07", "depends": ["W06"], "acceptance": ["A17", "A18", "A19"] },
+    { "id": "W08", "depends": ["W07"], "acceptance": ["A20", "A21", "A22"] },
+    { "id": "W09", "depends": ["W03", "W08"], "acceptance": ["A23", "A24", "A25", "A26", "A27", "A28"] },
+    { "id": "W10", "depends": ["W08"], "acceptance": ["A29", "A30", "A31"] },
+    { "id": "W11", "depends": ["W09", "W10"], "acceptance": ["A32", "A33", "A34", "A35"] },
+    { "id": "W12", "depends": ["W11"], "acceptance": ["A36", "A37", "A38"] }
+  ]
+}

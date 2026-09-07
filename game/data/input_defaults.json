@@ -1,0 +1,21 @@
+{
+  "forward": 87,
+  "back": 83,
+  "left": 65,
+  "right": 68,
+  "jump": 32,
+  "sprint": 4194325,
+  "crouch": 4194326,
+  "reload": 82,
+  "interact": 69,
+  "weapon_1": 49,
+  "weapon_2": 50,
+  "melee": 86,
+  "heal": 52,
+  "heal_1": 53,
+  "heal_2": 54,
+  "heal_3": 55,
+  "heal_4": 56,
+  "grenade": 71,
+  "pause": 4194305
+}

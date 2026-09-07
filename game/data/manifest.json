@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "files": {
+    "game_config.json": "e56bc9ee9cad1345f1d38f9cb432aa0b3ad48ae881d25180e8a9c6ffe994cfc9",
+    "arena.json": "02d6beb3be95468694e19e223fbb7126f35d9cb5005272bdde58281a989a7dc2",
+    "spawn_graph.json": "942134de33fb6b2c3fa29bf6ffb2f38c1ab8dcc7de84228d6c205576846cd953",
+    "input_defaults.json": "3c2db7dc81641910b2b98168563c561afb55c9750e105738c9ef823a60930a7b"
+  }
+}
