@@ -12,6 +12,8 @@ var grenade := GrenadeSystem.new()
 var round_number: int = 1
 var tick: int = 0
 var events: Array = []
+var melee_requests: Array[int] = []
+var throw_requests: Array[int] = []
 
 func setup(cfg: GameConfig, arena_queries: ArenaQueries) -> void:
 	config = cfg
@@ -44,6 +46,8 @@ func reset_round(number: int, spawn_ids: Array, seed_value: int) -> void:
 func step(frames: Array, current_tick: int) -> Array:
 	tick = current_tick
 	events = []
+	melee_requests.clear()
+	throw_requests.clear()
 	weapons.events.clear()
 	grenade.events.clear()
 	for player in players:
@@ -70,9 +74,19 @@ func step(frames: Array, current_tick: int) -> Array:
 		queries.proxies[player.slot].set_crouched(player.movement.crouched)
 		if not player.alive_at_start: continue
 		weapons.fire(player, frames[player.slot], tick)
+		if player.slot in throw_requests: grenade.throw_from(player, tick)
 		player.last_fire = frames[player.slot].held(InputFrame.FIRE)
 	var damage := weapons.step(tick)
 	damage.append_array(grenade.step(players, tick))
+	# Apply both accepted melee impulses after movement. The next physics tick
+	# resolves wall contact, without braking the new impulse on its release tick.
+	for slot in melee_requests:
+		var player: PlayerState = players[slot]
+		var other: PlayerState = players[1 - slot]
+		var offset := other.eye() - player.eye()
+		if not player.movement.vaulting and other.alive_at_start and offset.length() <= 1.5 and player.direction().dot(offset.normalized()) >= cos(deg_to_rad(30)) and queries.ray(player.eye(), other.eye()).is_empty():
+			other.velocity += Vector3(offset.x, 0, offset.z).normalized() * 5
+			events.append({"kind": "melee", "slot": slot})
 	events.append_array(DamageSystem.apply(players, damage))
 	for player in players:
 		weapons.complete(player, tick)
@@ -84,6 +98,7 @@ func step(frames: Array, current_tick: int) -> Array:
 
 func _cancel_and_actions(player: PlayerState, frame: InputFrame) -> void:
 	var a = CanonicalCodec.Action
+	if player.movement.vaulting: return
 	if not frame.held(InputFrame.SPRINT): player.movement.sprinting = false
 	if player.action == a.HEAL and (frame.held(InputFrame.SPRINT) or frame.held(InputFrame.ADS) or frame.held(InputFrame.FIRE)):
 		player.action = a.IDLE
@@ -111,12 +126,8 @@ func _cancel_and_actions(player: PlayerState, frame: InputFrame) -> void:
 			elif player.inventory.grenades[player.inventory.selected_grenade - 1] > 0: player.action = a.GRENADE_READY
 		elif kind == "heal" and player.action not in [a.GRENADE_READY, a.GRENADE_AIM, a.VAULT]: healing.begin(player, argument if argument > 0 else player.inventory.selected_heal, tick)
 		elif kind == "reload": weapons.reload_begin(player, tick)
-		elif kind == "throw": grenade.throw_from(player, tick)
+		elif kind == "throw": throw_requests.append(player.slot)
 		elif kind == "melee" and player.action == a.IDLE and tick >= player.next_melee_tick:
 			player.next_melee_tick = tick + 42
-			var other: PlayerState = players[1 - player.slot]
-			var offset := other.eye() - player.eye()
-			if offset.length() <= 1.5 and player.direction().dot(offset.normalized()) >= cos(deg_to_rad(30)) and queries.ray(player.eye(), other.eye()).is_empty():
-				other.velocity += Vector3(offset.x, 0, offset.z).normalized() * 5
-				events.append({"kind": "melee", "slot": player.slot})
+			melee_requests.append(player.slot)
 		break

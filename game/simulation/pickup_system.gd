@@ -20,6 +20,9 @@ func step(players: Array, frames: Array, tick: int, round_number: int) -> Array:
 		var player: PlayerState = players[slot]
 		var frame: InputFrame = frames[slot]
 		if player.hp_milli <= 0: continue
+		if player.movement.vaulting:
+			if player.action == CanonicalCodec.Action.SWAP: player.action = CanonicalCodec.Action.IDLE
+			continue
 		var item := target(player)
 		if player.action == CanonicalCodec.Action.SWAP:
 			if not frame.held(InputFrame.INTERACT) or item.is_empty() or item.id != player.action_target or item.revision != player.action_revision:

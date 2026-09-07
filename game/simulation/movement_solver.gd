@@ -11,7 +11,7 @@ func step(player: PlayerState, frame: InputFrame, dt: float = 1.0 / 60.0) -> Mov
 		state.vault_progress_ticks += 1
 		var t := clampf(state.vault_progress_ticks / 18.0, 0, 1)
 		var target := state.vault_start.lerp(state.vault_end, smoothstep(0.0, 1.0, t)) + Vector3.UP * 0.15 * sin(PI * t)
-		var moved := queries.move_body(player.slot, state, target - state.position)
+		var moved := queries.move_body(player.slot, state, target - state.position, true)
 		if moved.position.distance_to(target) > 0.08 or t >= 1: moved.vaulting = false
 		return moved
 	var crouch := frame.held(InputFrame.CROUCH)
@@ -23,6 +23,7 @@ func step(player: PlayerState, frame: InputFrame, dt: float = 1.0 / 60.0) -> Mov
 		state.velocity = (Vector3(state.velocity.x, 0, state.velocity.z).normalized() if state.velocity.length() > 0.1 else forward) * float(m.slideSpeed)
 	state.last_crouch = crouch
 	state.crouched = crouch or (state.crouched and not queries.standing_clear(player.slot, state.position))
+	if state.crouched: state.sprinting = false
 	if not crouch or Vector2(state.velocity.x, state.velocity.z).length() < 3: state.slide_remaining_ticks = 0
 	if frame.has_action("jump") and state.grounded:
 		var vault := queries.vault_destination(player.slot, player)

@@ -10,7 +10,7 @@ var events: Array = []
 
 func throw_from(player: PlayerState, tick: int) -> DuelResult:
 	var kind := player.inventory.selected_grenade
-	if player.action != CanonicalCodec.Action.GRENADE_AIM or player.inventory.grenades[kind - 1] < 1 or grenades.size() >= 4: return DuelResult.failure("ACTION_CONFLICT")
+	if player.movement.vaulting or player.action != CanonicalCodec.Action.GRENADE_AIM or player.inventory.grenades[kind - 1] < 1 or grenades.size() >= 4: return DuelResult.failure("ACTION_CONFLICT")
 	var speed: float = config.rules.grenades.frag.speed if kind == 1 else config.rules.grenades.incendiary.speed
 	var origin := player.eye() + player.direction() * 0.5
 	if not queries.ray(player.eye(), origin).is_empty(): origin = player.eye()

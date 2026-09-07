@@ -9,7 +9,7 @@ Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲー�
 | W01 | 実装・一部検証済み | 固定版取得、プロジェクト、起動引数、プロファイルロック、テストランナー、Windows release export。debug/release exportの空profile起動検査成功 |
 | W02 | 実装・一部検証済み | 型、設定ハッシュ、reducer、選択、10勝、同時死亡、アーマー境界。wire payloadの全固定レイアウト一致は未完 |
 | W03 | 実装中 | append-only/A-B保存、read-back、履歴再生、復帰receipt。128ラウンド毎のcheckpointと双方ACK後の履歴整理、2000 draw・最新checkpoint破損からの復元成功。全保存中断点試験は未完 |
-| W04 | 実装・一部検証済み | マップ、capsule sweep、ジャンプ・スライド・乗り越え。実物理の全地点経路・天井・vault深さの受入は未完 |
+| W04 | ローカル受入完了 | A07/A08: 実衝突形状の全合法spawn経路、射線、配置、移動速度/slide/天井/vaultと相手割込を確認 |
 | W05 | 実装・一部検証済み | 3銃、弾速、頭胴、反動、リロード、押し返し。実射撃で10勝完走。全命中境界の試験は未完 |
 | W06 | 実装・一部検証済み | 独立loot抽選、弾薬・所持上限、回復、長押し交換。全競合・キャンセルの通信試験は未完 |
 | W07 | 実装・未全面検証 | フラグ反射、爆風遮蔽、焼夷床探索、炎cell、投擲入力・軌道。全物理受入は未完 |
@@ -32,6 +32,10 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 ```
 
 ## 確認できた証拠
+
+- `artifacts/integration/20260907-222504-835/result.json`: 移動・近接・初期化修正後のFullMatch成功。両者10–0、seq31、同hash、最終HP一致。最大poll間隔1151/1172ms、250ms超の処理区間なし。
+
+- `artifacts/tests/20260907-222138-208/result.json`: Godot 32テスト、Node 17テスト、設計検証成功。移動・近接・マップ209検査・ラウンドreset・選択seed非共有を含む。
 
 - 最新配布: `release/ArenaDuel-0.1.0.zip`、製品commit `c93fce7`、SHA256 `fb7b73626ede681de6c4c23998d0b252d1cdeedd504bb1e5dfb05ed849904fff`。`artifacts/package/20260907-215731-189/result.json` でinstall、menu/practice、debug引数拒否、追加ファイル保持uninstall、reinstall成功。
 
@@ -64,4 +68,4 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 次に進める内容
 
-残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `c93fce7` の補間/replay窓/認証競合/期限終了修正を反映済み。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。
+残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `c93fce7`。移動/近接/resetの修正後に更新が必要。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。

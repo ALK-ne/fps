@@ -40,6 +40,12 @@ func reset(round_number: int) -> void:
 	inventory = Inventory.new()
 	action = CanonicalCodec.Action.IDLE
 	action_end_tick = 0
+	action_kind = 0
+	action_target = 0
+	action_revision = 0
+	yaw = 0.0
+	pitch = 0.0
+	alive_at_start = true
 	recoil = Vector2.ZERO
 	last_fire = false
 	next_melee_tick = 0

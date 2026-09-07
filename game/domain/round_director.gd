@@ -13,7 +13,7 @@ func begin_round(state: MatchState, seed_value: int) -> MatchEvent:
 	rng.seed = seed_value
 	first_slot = state.previous_winner if state.previous_winner >= 0 else rng.randi_range(0, 1)
 	selected_spawn = [-1, -1]
-	return MatchEvent.make(CanonicalCodec.Durable.ROUND_PREPARED, {"round": state.round + 1, "first_slot": first_slot, "selection_seed": seed_value})
+	return MatchEvent.make(CanonicalCodec.Durable.ROUND_PREPARED, {"round": state.round + 1, "first_slot": first_slot})
 
 func activate(tick: int) -> void:
 	_set_phase(CanonicalCodec.Phase.SELECTING_FIRST, tick + 600)

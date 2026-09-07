@@ -65,7 +65,8 @@ func test_selection_deadline(a: DuelAssertions) -> void:
 	a.truth(cfg.load_data().ok, "config manifest")
 	var d := RoundDirector.new()
 	d.config = cfg
-	d.begin_round(_created(), 5)
+	var prepared := d.begin_round(_created(), 5)
+	a.truth(not prepared.payload.has("selection_seed"), "selection RNG seed stays host-only")
 	d.activate(0)
 	var phase_data := d.to_data()
 	phase_data.round = 1

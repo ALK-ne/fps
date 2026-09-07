@@ -10,13 +10,13 @@
 | A04 | PARTIAL | 実ファイルA/B破損・append再生。製品全kill点未実施 |
 | A05 | PARTIAL | 履歴hash/改ざん拒否、復帰照合。checkpoint保存/整理と旧世代復元unit成功。全kill点未実施 |
 | A06 | PARTIAL | reducer冪等性・terminal receipt、実再起動1点。全境界未実施 |
-| A07 | PARTIAL | 設計BFS・マップ生成・実壁ray。実全経路未実施 |
-| A08 | PARTIAL | 実capsule床・ジャンプ高度・着地。全移動モード未実施 |
+| A07 | PASS | test_arena: 実capsule gridのBFS・全合法pairのbody sweep、頭胴射線、左右対称、全loot候補、低足場、境界の209検査 |
+| A08 | PASS | 直進/斜めの全速度、jump高度、42tick slide、天井、18tick vault、厚さ/高さ制限、相手割込停止、空中/slide射撃、vault入力制限 |
 | A09 | PARTIAL | 実弾命中、発射tick[0,7,14,20,27,33,40,47,53,60]。全散布条件未実施 |
 | A10 | PARTIAL | 実射撃・中央壁。全銃頭/薄壁/銃口未実施 |
 | A11 | PARTIAL | 同時死亡・timeout比較unit。完了同tick全組合せ未実施 |
-| A12 | NOT_RUN | 全近接・壁・sprint実物理受入未実施 |
-| A13 | PARTIAL | 1000seedで10銃保証。chance fixture・全物理配置未実施 |
+| A12 | PASS | test_melee: 素手/武器、同時近接の5m/s・damage0、射程/視野外、壁遮蔽/壁停止、sprint中射撃の16検査 |
+| A13 | PASS | 1000seed、chance0/1、銃と弾箱対応、全候補の実衝突余裕、次roundの装備/姿勢/弾/投擲reset |
 | A14 | NOT_RUN | 999/1000ms・全競合・視線中断通信受入未実施 |
 | A15 | PARTIAL | 弾薬上限・残量unit。reload追加試験と通信未全面検査 |
 | A16 | PARTIAL | 実装済み。全回復行列・通信受入未実施 |
