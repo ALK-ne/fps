@@ -43,6 +43,7 @@ var baseline_ready: bool = false
 var baseline_hash: PackedByteArray
 var pending_snapshot: Dictionary = {}
 var last_poll_ms: int = 0
+var max_poll_gap_ms: int = 0
 var last_snapshot_tick: int = -1
 var remote_resume: Dictionary = {}
 var local_continuous: bool = true
@@ -130,8 +131,7 @@ func _save_session() -> DuelResult:
 func poll() -> void:
 	if not started: return
 	var now := Time.get_ticks_msec()
-	if OS.is_debug_build() and last_poll_ms > 0 and now - last_poll_ms >= 250:
-		print(JSON.stringify({"poll_gap_ms": now - last_poll_ms, "phase": phase, "tick": tick}))
+	if last_poll_ms > 0: max_poll_gap_ms = maxi(max_poll_gap_ms, now - last_poll_ms)
 	last_poll_ms = now
 	for e in transport.poll_nonblocking():
 		if e.type == "connect": _on_connect(e.peer)
@@ -168,7 +168,7 @@ func _on_connect(peer: ENetPacketPeer) -> void:
 		return
 	peers[peer] = {"codec": PacketCodec.new(), "auth": false, "stage": 0, "start": Time.get_ticks_msec(),
 		"key": str(invitation_data.secret).hex_decode(), "host_nonce": PackedByteArray(), "guest_nonce": PackedByteArray(),
-		"packets": 0, "bytes": 0, "window": Time.get_ticks_msec()}
+		"packets": 0, "bytes": 0, "window": Time.get_ticks_msec(), "early": [], "early_bytes": 0}
 	if not host:
 		var info: Dictionary = peers[peer]
 		info.guest_nonce = DuelIds.random_bytes(32)
@@ -200,6 +200,13 @@ func _packet(peer: ENetPacketPeer, channel: int, bytes: PackedByteArray) -> void
 		if OS.is_debug_build(): print(JSON.stringify({"payload_rejected": data.error_code, "kind": packet.kind, "bytes": packet.payload.size()}))
 		return
 	if not info.auth:
+		# ENet orders each channel independently. A session-key-authenticated
+		# record on channel 3 can overtake Authenticated on channel 0.
+		if not host and info.stage == 1 and packet.kind not in [2, 4]:
+			if packet.epoch == epoch and packet.slot == 0 and info.early.size() < 16 and info.early_bytes + packet.payload.size() <= 32768:
+				info.early.append({"kind": packet.kind, "data": data.value})
+				info.early_bytes += packet.payload.size()
+			return
 		_handshake(peer, packet.kind, data.value, packet.epoch)
 		return
 	if peer != active_peer or packet.slot != 1 - local_slot: return
@@ -238,16 +245,20 @@ func _handshake(peer: ENetPacketPeer, kind: int, d: Dictionary, packet_epoch: in
 		_send_to(peer, 3, {"host_nonce": info.host_nonce, "guest_nonce": info.guest_nonce}, 0, true)
 	elif host and kind == 3 and info.stage == 1:
 		if d.get("host_nonce") != info.host_nonce or d.get("guest_nonce") != info.guest_nonce or packet_epoch != epoch: return
-		_bind(peer)
+		if not _bind(peer): return
 		_send(4, {"epoch": epoch, "guest": info.guest_id, "seq": store.state.last_seq, "hash": store.state.last_hash}, 0, true)
 		if resuming or store.state.last_seq > 0: _begin_resume()
 		else: _create_match()
 	elif not host and kind == 4 and info.stage == 1:
 		if d.get("guest") != profile.player_id or d.get("epoch") != epoch: return
-		_bind(peer)
+		if not _bind(peer): return
 		if resuming: _begin_resume()
+		var early: Array = info.early
+		info.early = []
+		info.early_bytes = 0
+		for message in early: _dispatch(message.kind, message.data)
 
-func _bind(peer: ENetPacketPeer) -> void:
+func _bind(peer: ENetPacketPeer) -> bool:
 	var info: Dictionary = peers[peer]
 	info.auth = true
 	active_peer = peer
@@ -262,8 +273,14 @@ func _bind(peer: ENetPacketPeer) -> void:
 			session_data.host_id = info.host_id
 			session_data.host_boot = info.host_boot
 		session_data.epoch = epoch
-		if not _save_session().ok: _stop_conflict("STORE_WRITE_FAILED")
+		if not _save_session().ok:
+			info.auth = false
+			connected = false
+			active_peer = null
+			_stop_conflict("STORE_WRITE_FAILED")
+			return false
 	authenticated.emit()
+	return true
 
 func _send_to(peer: ENetPacketPeer, kind: int, data: Dictionary, channel: int, reliable: bool, forced_epoch: int = -1) -> void:
 	if not peers.has(peer): return
@@ -295,7 +312,7 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 				last_action_seq = r.value.seq
 				pending_actions.append_array(r.value.actions)
 		11:
-			if host or not d.has("players") or d.get("round") != store.state.round or int(d.get("tick", -1)) <= last_snapshot_tick: return
+			if host or not d.has("players") or d.get("round") != store.state.round or int(d.get("tick", -1)) <= maxi(last_snapshot_tick, int(pending_snapshot.get("tick", -1))): return
 			pending_snapshot = d
 		22:
 			if not host and d.get("round") == store.state.round and d.get("events") is Array: game_events.emit(d.events)
@@ -314,6 +331,7 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 			if host or d.get("round") != store.state.round: return
 			if d.has("world"):
 				var initialize_camera := not baseline_ready or world.simulation.round_number != int(d.world.round)
+				if initialize_camera: world.remote_interpolation.clear()
 				Replication.apply_world(world.simulation, d.world)
 				if initialize_camera: tick = int(d.world.tick)
 				world.sync_items()
@@ -352,6 +370,9 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 		32:
 			if not resuming: return
 			remote_resume = d
+			if d.get("terminal", false):
+				_stop_conflict("RECOVERY_EXPIRED")
+				return
 			if host: _reconcile()
 		33:
 			if not d.get("from") is int: return
@@ -534,6 +555,8 @@ func physics(frame: InputFrame) -> void:
 			last_snapshot_tick = pending_snapshot.tick
 			tick = last_snapshot_tick + int(round(rtt_ms * 0.03))
 			Replication.apply_player(world.simulation.players[0], pending_snapshot.players[0])
+			var other: PlayerState = world.simulation.players[0]
+			world.remote_interpolation.push(last_snapshot_tick, other.position, other.velocity, other.yaw, Time.get_ticks_msec())
 			prediction.reconcile(world.simulation.players[1], pending_snapshot.players[1], world.simulation.movement)
 			pending_snapshot = {}
 		if phase != CanonicalCodec.Phase.FIGHTING or not baseline_ready: return
@@ -635,8 +658,11 @@ func _finish_resume() -> void:
 
 func _stop_conflict(reason: String) -> void:
 	recovery.conflict = true
+	if reason == "RECOVERY_EXPIRED":
+		recovery.expired = true
+		var saved := store.tombstone(reason, int(session_data.get("epoch", 0)))
+		if not saved.ok: reason = "STORE_WRITE_FAILED"
 	phase = CanonicalCodec.Phase.STORAGE_ERROR if reason.begins_with("STORE") else CanonicalCodec.Phase.CONFLICT
-	if reason == "RECOVERY_EXPIRED": store.tombstone(reason, int(session_data.get("epoch", 0)))
 	_set_status("試合を停止しました: " + reason + "。得点を推測せず、保存記録を保持しています。")
 	phase_changed.emit()
 

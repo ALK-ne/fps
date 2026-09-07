@@ -6,15 +6,15 @@ Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲー�
 
 | 作業 | 状態 | 成果と残り |
 | --- | --- | --- |
-| W01 | 実装・一部検証済み | 固定版取得、プロジェクト、起動引数、プロファイルロック、テストランナー、Windows release export。debug export検査を追加予定 |
+| W01 | 実装・一部検証済み | 固定版取得、プロジェクト、起動引数、プロファイルロック、テストランナー、Windows release export。debug/release exportの空profile起動検査成功 |
 | W02 | 実装・一部検証済み | 型、設定ハッシュ、reducer、選択、10勝、同時死亡、アーマー境界。wire payloadの全固定レイアウト一致は未完 |
 | W03 | 実装中 | append-only/A-B保存、read-back、履歴再生、復帰receipt。128ラウンド毎のcheckpointと双方ACK後の履歴整理、2000 draw・最新checkpoint破損からの復元成功。全保存中断点試験は未完 |
 | W04 | 実装・一部検証済み | マップ、capsule sweep、ジャンプ・スライド・乗り越え。実物理の全地点経路・天井・vault深さの受入は未完 |
 | W05 | 実装・一部検証済み | 3銃、弾速、頭胴、反動、リロード、押し返し。実射撃で10勝完走。全命中境界の試験は未完 |
 | W06 | 実装・一部検証済み | 独立loot抽選、弾薬・所持上限、回復、長押し交換。全競合・キャンセルの通信試験は未完 |
 | W07 | 実装・未全面検証 | フラグ反射、爆風遮蔽、焼夷床探索、炎cell、投擲入力・軌道。全物理受入は未完 |
-| W08 | 実装中 | 実ENet、HMAC challenge、epoch、断片化、固定長snapshot、予測、確定履歴ACK、対戦・再戦。remote補間、全message固定wire形式、悪意入力全検査、全entity同期検査は未完 |
-| W09 | 実装・一部検証済み | 両役30秒再起動→第2ラウンド・正しい1点・履歴一致を実証。全phase/期限超過/時計/保存ACK境界の試験は未完 |
+| W08 | 実装中 | 実ENet、HMAC challenge、epoch、断片化、固定長snapshot、予測、確定履歴ACK、対戦・再戦。remoteの100ms補間/最大100ms外挿と1024件replay窓を追加。全message固定wire形式、悪意入力全検査、全entity同期検査は未完 |
+| W09 | 実装・一部検証済み | 両役30秒再起動→第2ラウンド・正しい1点・履歴一致を実証。両役65秒超過も得点不変・再開拒否を実証。全phase/時計/保存ACK境界の試験は未完 |
 | W10 | 実装中 | メニュー、設定、練習標的、HUD、ホイール選択、生成WAV、日本語、focus解除。HUD配置・ホイール描画を画像確認し、画質を解像度倍率/MSAAへ適用。音・入力の全受入は未完 |
 | W11 | 実装中 | Windows ZIP、Install/Uninstall、利用者追加ファイル保持、release debug引数拒否。障害proxy実装・100ms/1%loss対戦完走。性能・遅延・全配布受入は未完 |
 | W12 | EXTERNAL_PENDING | 実2家庭の接続・復帰、利用者本人の操作感評価が必要 |
@@ -33,6 +33,19 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 確認できた証拠
 
+- `artifacts/integration/20260907-215137-174/result.json` / `20260907-215405-188/result.json`: 両役の65秒後再起動を拒否しscore0–0を保持。hostが再起動するケースは継続guestのtombstoneで再開を拒否するが、再起動hostは相手に到達できず待機表示のまま。guest再起動ケースは両者がtombstoneを保存し停止。
+- 通信/補間/Sessionの8テスト指定実行成功。相手の期限終了をチェックサム付きで保存すること、保存先をファイルで塞いだ実書込失敗時にStorageErrorになることを含む。
+
+- `artifacts/debug-export/20260907-215001-523/result.json`: Windows debug exportと空profile起動成功。
+- `artifacts/integration/20260907-163522-074/result.json`: 認証完了前のチャンネル跨ぎ先着記録を保留する修正後、100ms/1%loss対戦10勝完走・両者同hash。
+- `artifacts/integration/20260907-163655-983/result.json` / `20260907-214831-327/result.json`: 認証変更後もhost/guest各30秒後復帰、正しい1点、同hash、第2ラウンド開始成功。
+
+- `artifacts/integration/20260907-163038-891/result.json`: 最新FullMatch成功、10–0、HP一致、seq31・同hash。最大poll間隔host643ms/guest593ms、250ms超の処理区間なし。
+- `artifacts/tests/20260907-162710-960/result.json`: 補間を含むGodot 23テスト、Node 17テスト成功。追加した1024件replay窓は通信/補間6テストを指定実行し成功。
+
+- `artifacts/package/20260907-162222-649/result.json`: commit `3368313` のrelease版でPS5.1 install、メニュー/練習起動、debug引数拒否、追加ファイル保持uninstall、reinstall成功。ZIP SHA256 `64fa196fba69d23413c7116e2271ed475b636c460df61d39993713057e495dbb`。
+- `artifacts/integration/20260907-162315-197/result.json`: 最新Smoke成功、両者Fighting・seq3・同hash。
+
 - `artifacts/tests/20260907-160159-894/result.json`: Godot 22テスト・Node 17テスト成功。2000 drawの保存履歴数制限、hash一致、最新checkpoint破損時の旧世代復元を含む。
 
 - `artifacts/integration/20260906-214410-775/result.json`: 実2プロセスで認証・地点選択・戦闘開始、履歴一致。
@@ -45,8 +58,8 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 - `artifacts/release-start.stderr.log`: export版の空専用profile起動、exit0。
 - `artifacts/release-hook.stderr.log`: export版のscenario引数拒否、exit1。初期化失敗時の未接続UIリークは後続修正済み。
 
-統合試験にはloopbackでもheartbeat timeoutを検出した失敗runがある。成功runをもって損失・遅延・停止への頑健性が完成したとは扱わない。
+統合試験にはloopbackでもheartbeat timeoutを検出した失敗runがある。追加診断で試験レポート書き込みの10秒停止を検出し、一時ファイルからの差替え、読み取り側のFileShare.ReadWrite/Delete、状態変化時だけのstdout出力へ修正した。起動待ちもホスト/ゲスト各120秒へ分離した。通信の2秒/復帰60秒は変更していない。追加診断の毎フレームstdoutも遅延を増幅し得るため、最大処理時間のメモリ集計へ置き換えた。暗号オブジェクト再利用の差は200回で約1msで、数秒停止の主因とは判断しない。全障害行列の合格を意味しない。
 
 ## 次に進める内容
 
-最新コードの回帰試験、期限超過、残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPはソース更新後に再ビルドが必要。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。
+残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPはcommit `3368313`。補間/replay窓の追加後に再ビルドする。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。

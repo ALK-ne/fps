@@ -1,13 +1,24 @@
 class_name PacketCodec
 extends RefCounted
 
+# Crypto construction initializes the platform backend. Reuse it for the
+# per-packet HMAC and constant-time comparison on the main thread.
+static var crypto := Crypto.new()
+
 var outgoing: Array = [0, 0, 0, 0]
 var incoming: Array = [-1, -1, -1, -1]
+var received_sequences: Array[PackedInt64Array] = []
 var fragments: Dictionary = {}
 var next_message: int = 1
 
+func _init() -> void:
+	for channel in 4:
+		var window := PackedInt64Array()
+		window.resize(1024)
+		received_sequences.append(window)
+
 static func mac(key: PackedByteArray, bytes: PackedByteArray) -> PackedByteArray:
-	return Crypto.new().hmac_digest(HashingContext.HASH_SHA256, key, bytes)
+	return crypto.hmac_digest(HashingContext.HASH_SHA256, key, bytes)
 
 func encode(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epoch: int, slot: int, channel: int, key: PackedByteArray) -> Array:
 	var packets: Array = []
@@ -48,15 +59,18 @@ func _packet(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epo
 func decode(bytes: PackedByteArray, key: PackedByteArray, match_id: PackedByteArray, channel: int, expected_epoch: int = -1) -> DuelResult:
 	if bytes.size() < 80 or bytes.size() > 1200 or key.size() != 32 or channel not in [0, 1, 2, 3]: return DuelResult.failure("INVALID_PACKET")
 	var body := bytes.slice(0, bytes.size() - 32)
-	if not Crypto.new().constant_time_compare(mac(key, body), bytes.slice(bytes.size() - 32)): return DuelResult.failure("AUTH_FAILED")
+	if not crypto.constant_time_compare(mac(key, body), bytes.slice(bytes.size() - 32)): return DuelResult.failure("AUTH_FAILED")
 	if body.slice(0, 4) != "ADU1".to_ascii_buffer() or body.decode_u16(4) != 1 or body.slice(8, 24) != match_id: return DuelResult.failure("VERSION_MISMATCH")
 	var epoch := body.decode_u32(24)
 	var seq := body.decode_u64(28)
 	var flags := body.decode_u16(38)
 	if expected_epoch >= 0 and epoch != expected_epoch: return DuelResult.failure("STALE_EPOCH")
 	if body[37] != channel or body[36] > 1 or flags > 1 or body.decode_u32(44) != 0 or body.decode_u32(40) != body.size() - 48: return DuelResult.failure("INVALID_PACKET")
-	if seq <= int(incoming[channel]) or seq < 1: return DuelResult.failure("REPLAY")
-	incoming[channel] = seq
+	if seq < 1 or int(incoming[channel]) - seq >= 1024: return DuelResult.failure("REPLAY")
+	var index := seq % 1024
+	if received_sequences[channel][index] == seq: return DuelResult.failure("REPLAY")
+	received_sequences[channel][index] = seq
+	incoming[channel] = maxi(int(incoming[channel]), seq)
 	var payload := body.slice(48)
 	var kind := body.decode_u16(6)
 	if flags == 1:

@@ -1,8 +1,8 @@
 [CmdletBinding()]
-param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','All')][string]$Suite='Smoke',[int]$Seed=20260906)
+param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','All')][string]$Suite='Smoke',[int]$Seed=20260906)
 $ErrorActionPreference = 'Stop'
 if ($Suite -eq 'All') {
-    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','NetworkFaults')) {
+    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','NetworkFaults')) {
         & $PSCommandPath -Suite $case -Seed $Seed
     }
     return
@@ -85,6 +85,23 @@ try {
         if ($restartGuest) { $guestProcess = Start-Peer 'guest' $guestProfile 27837 -Resume } else { $hostProcess = Start-Peer 'host' $hostProfile 27836 -Resume }
         Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.round -eq 2 -and $g.round -eq 2 -and $h.phase -eq 5 -and $g.phase -eq 5 } 25
     }
+    if ($Suite -in @('ExpiryRealtime','GuestExpiryRealtime')) {
+        $restartGuest = $Suite -eq 'GuestExpiryRealtime'
+        $survivorProfile = if ($restartGuest) { $hostProfile } else { $guestProfile }
+        if ($restartGuest) { Stop-Process -Id $guestProcess.Id -Force } else { Stop-Process -Id $hostProcess.Id -Force }
+        Wait-State { $remaining=Read-Report $survivorProfile; $remaining -and $remaining.phase -eq 7 } 10
+        $observed = [Diagnostics.Stopwatch]::StartNew()
+        while ($observed.Elapsed.TotalSeconds -lt 65) { Start-Sleep -Milliseconds 250 }
+        $survivor = Read-Report $survivorProfile
+        if (!$survivor.recovery_expired -or !$survivor.tombstone -or ($survivor.scores -join ',') -ne '0,0') { throw 'Expiry was not durably recorded without speculative score' }
+        if ($restartGuest) { $guestProcess = Start-Peer 'guest' $guestProfile 27837 -Resume } else { $hostProcess = Start-Peer 'host' $hostProfile 27836 -Resume }
+        Wait-State { $restored=Read-Report $(if ($restartGuest) {$guestProfile} else {$hostProfile}); $restored -and $restored.scenario -eq 'resume' } 120
+        Start-Sleep -Seconds 5
+        foreach ($profileName in @($hostProfile,$guestProfile)) {
+            $peerState = Read-Report $profileName
+            if ($peerState.phase -eq 5 -or $peerState.round -ne 1 -or ($peerState.scores -join ',') -ne '0,0') { throw 'Expired match resumed or changed score' }
+        }
+    }
     $h = Read-Report $hostProfile
     $g = Read-Report $guestProfile
     if ($h.hash -ne $g.hash -or $h.seq -ne $g.seq -or ($h.scores -join ',') -ne ($g.scores -join ',')) { throw 'Peer durable states diverged' }
@@ -94,6 +111,10 @@ try {
     if ($errors) { throw "Godot errors: $($errors.Name -join ', ')" }
     @{suite=$Suite;seed=$Seed;status='PASS';host=$h;guest=$g;logPath=$logs} | ConvertTo-Json -Depth 10 | Set-Content "$logs/result.json"
     Get-Content "$logs/result.json"
+} catch {
+    $failure = $_
+    @{suite=$Suite;seed=$Seed;status='FAIL';error=$failure.Exception.Message;host=(Read-Report $hostProfile);guest=(Read-Report $guestProfile);logPath=$logs} | ConvertTo-Json -Depth 10 | Set-Content "$logs/result.json"
+    throw
 } finally {
     foreach ($p in $owned) {
         $p.Refresh()

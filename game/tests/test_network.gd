@@ -37,6 +37,19 @@ func test_fragments(a: DuelAssertions) -> void:
 	a.truth(result.ok, "all fragments assembled")
 	a.equal(result.value.payload, data, "fragment bytes exact")
 
+func test_reordering_window(a: DuelAssertions) -> void:
+	var sender := PacketCodec.new()
+	var receiver := PacketCodec.new()
+	var key := DuelIds.random_bytes(32)
+	var mid := DuelIds.random_bytes(16)
+	var packets: Array = []
+	for i in 1026: packets.append(sender.encode(5, PackedByteArray(), mid, 1, 0, 0, key)[0])
+	for i in [0, 2, 1]: a.truth(receiver.decode(packets[i], key, mid, 0, 1).ok, "unseen reordered sequence")
+	a.truth(not receiver.decode(packets[1], key, mid, 0, 1).ok, "duplicate in window rejected")
+	a.truth(receiver.decode(packets[1025], key, mid, 0, 1).ok, "window advances")
+	a.truth(not receiver.decode(packets[0], key, mid, 0, 1).ok, "expired sequence rejected")
+	a.truth(receiver.decode(packets[3], key, mid, 0, 1).ok, "old unseen sequence within 1024 accepted")
+
 func test_real_enet(a: DuelAssertions) -> void:
 	var host := ENetTransport.new()
 	var guest := ENetTransport.new()

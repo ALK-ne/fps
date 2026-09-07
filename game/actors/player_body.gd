@@ -68,6 +68,7 @@ func hitbox_rids() -> Array[RID]:
 
 func present(state: PlayerState, local: bool) -> void:
 	position = state.position
+	avatar.position = Vector3.ZERO
 	avatar.rotation.y = state.yaw
 	avatar.visible = not local and state.hp_milli > 0
 	set_crouched(state.movement.crouched)

@@ -16,6 +16,7 @@ var frame := InputFrame.new()
 var tick: int = 0
 var menu_return: String = "menu"
 var last_phase: int = -1
+var slow_sections: Dictionary = {}
 
 func start() -> void:
 	_boot_trace("arguments")
@@ -249,7 +250,9 @@ func _process(delta: float) -> void:
 
 func _trace_slow(section: String, started_us: int) -> void:
 	if OS.is_debug_build() and Time.get_ticks_usec() - started_us >= 250000:
-		print(JSON.stringify({"slow_section": section, "ms": (Time.get_ticks_usec() - started_us) / 1000}))
+		# Diagnostics must not add synchronous console IO to a delayed frame.
+		var milliseconds := (Time.get_ticks_usec() - started_us) / 1000
+		slow_sections[section] = maxi(int(slow_sections.get(section, 0)), milliseconds)
 
 func _error(result: DuelResult) -> void:
 	if is_instance_valid(ui.status_label): ui.status_label.text = result.error_code + " " + result.details

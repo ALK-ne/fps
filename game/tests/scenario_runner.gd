@@ -5,6 +5,7 @@ var configured_round: int = -1
 var ready_since: int = 0
 var last_report: int = 0
 var finished_match: String = ""
+var last_logged_state: String = ""
 
 func _physics_process(_delta: float) -> void:
 	if app == null: return
@@ -38,11 +39,13 @@ func _physics_process(_delta: float) -> void:
 			Input.action_press("ads")
 	if Time.get_ticks_msec() - last_report > 500:
 		last_report = Time.get_ticks_msec()
-		var result := {"pid": OS.get_process_id(), "role": "host" if s.host else "guest", "connected": s.connected, "phase": s.phase,
+		var result := {"pid": OS.get_process_id(), "scenario": app.options.scenario, "role": "host" if s.host else "guest", "connected": s.connected, "phase": s.phase,
 			"round": s.store.state.round, "scores": s.store.state.scores, "seq": s.store.state.last_seq, "hash": s.store.state.last_hash.hex_encode(),
 			"status": s.status, "tick": s.tick, "tx": s.sent_bytes, "rx": s.received_bytes, "terminal": s.store.state.is_terminal(), "winner": s.store.state.match_winner,
 			"hp": [s.world.simulation.players[0].hp_milli,s.world.simulation.players[1].hp_milli], "gun": s.world.simulation.players[0].inventory.active(), "captured": app.router.captured,
-			"match": str(s.invitation_data.match), "finished_match": finished_match}
+			"match": str(s.invitation_data.match), "finished_match": finished_match,
+			"max_poll_gap_ms": s.max_poll_gap_ms, "slow_sections_ms": app.slow_sections,
+			"recovery_expired": s.recovery.expired, "tombstone": FileAccess.file_exists(s.store.root + "/terminal.json.a") or FileAccess.file_exists(s.store.root + "/terminal.json.b")}
 		var path := ProjectSettings.globalize_path("res://").path_join("../artifacts/scenario-" + app.options.profile + ".json").simplify_path()
 		var write_started := Time.get_ticks_usec()
 		# Readers never open the staging file, so Windows sharing locks cannot
@@ -54,4 +57,7 @@ func _physics_process(_delta: float) -> void:
 			if DirAccess.rename_absolute(path + ".tmp", path) != OK:
 				push_error("SCENARIO_REPORT_REPLACE_FAILED")
 		app._trace_slow("scenario_report", write_started)
-		print(JSON.stringify({"scenario": app.options.scenario, "phase": s.phase, "round": s.store.state.round, "seq": s.store.state.last_seq}))
+		var logged_state := JSON.stringify({"scenario": app.options.scenario, "phase": s.phase, "round": s.store.state.round, "seq": s.store.state.last_seq})
+		if logged_state != last_logged_state:
+			last_logged_state = logged_state
+			print(logged_state)

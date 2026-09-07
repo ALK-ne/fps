@@ -10,8 +10,10 @@ func _run() -> void:
 	var directory := DirAccess.open("res://tests")
 	var files := directory.get_files()
 	files.sort()
+	var selected := OS.get_cmdline_user_args()
 	for filename in files:
 		if not filename.begins_with("test_") or not filename.ends_with(".gd"): continue
+		if not selected.is_empty() and filename not in selected: continue
 		var script = load("res://tests/" + filename)
 		if script == null or not script.can_instantiate():
 			failed += 1

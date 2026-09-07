@@ -19,6 +19,7 @@ var hit_until: int = 0
 var head_hit: bool = false
 var local_slot: int = 0
 var frame_times: Array = []
+var remote_interpolation := RemoteInterpolation.new()
 
 func build(cfg: GameConfig) -> void:
 	config = cfg
@@ -79,6 +80,12 @@ func present(settings: SettingsStore, frame: InputFrame, delta: float) -> void:
 	for slot in 2:
 		var player: PlayerState = simulation.players[slot]
 		simulation.queries.proxies[slot].present(player, slot == local_slot)
+		if local_slot == 1 and slot == 0:
+			var displayed := remote_interpolation.sample(Time.get_ticks_msec())
+			if not displayed.is_empty():
+				# Keep authoritative physics at its current position; delay only the avatar.
+				simulation.queries.proxies[slot].avatar.position = displayed.position - player.position
+				simulation.queries.proxies[slot].avatar.rotation.y = displayed.yaw
 		var distance: float = player.position.distance_to(last_positions[slot])
 		last_positions[slot] = player.position
 		if player.movement.grounded and distance < 1:
