@@ -16,14 +16,25 @@ func target(player: PlayerState) -> Dictionary:
 func step(players: Array, frames: Array, tick: int, round_number: int) -> Array:
 	var events: Array = []
 	var priority := (round_number - 1) % 2
+	# Resolve both requests against the same pre-transaction revision.
+	var targets: Array = [target(players[0]), target(players[1])]
+	var revisions: Array = [targets[0].get("revision", -1), targets[1].get("revision", -1)]
 	for slot in [priority, 1 - priority]:
 		var player: PlayerState = players[slot]
 		var frame: InputFrame = frames[slot]
+		if not frame.held(InputFrame.INTERACT): player.interact_latched = false
+		var pressed := frame.has_action("interact") and not player.interact_latched
+		if pressed: player.interact_latched = true
 		if player.hp_milli <= 0: continue
 		if player.movement.vaulting:
 			if player.action == CanonicalCodec.Action.SWAP: player.action = CanonicalCodec.Action.IDLE
 			continue
-		var item := target(player)
+		var item: Dictionary = targets[slot]
+		if not item.is_empty() and (item.revision != revisions[slot] or item.amount <= 0):
+			if pressed or player.action == CanonicalCodec.Action.SWAP:
+				events.append({"kind": "action_rejected", "slot": slot, "reason": "STALE_ITEM"})
+			if player.action == CanonicalCodec.Action.SWAP: player.action = CanonicalCodec.Action.IDLE
+			continue
 		if player.action == CanonicalCodec.Action.SWAP:
 			if not frame.held(InputFrame.INTERACT) or item.is_empty() or item.id != player.action_target or item.revision != player.action_revision:
 				player.action = CanonicalCodec.Action.IDLE
@@ -33,12 +44,11 @@ func step(players: Array, frames: Array, tick: int, round_number: int) -> Array:
 				player.inventory.revision += 1
 				item.amount = 0
 				item.revision += 1
-				var pos := player.position + Vector3(-sin(player.yaw), 0, -cos(player.yaw)) * 0.7
-				if not queries.ray(player.position + Vector3.UP * 0.3, pos + Vector3.UP * 0.3).is_empty(): pos = player.position
-				items.append({"id": gun.id, "revision": 0, "kind": 1, "subtype": gun.kind, "amount": 1, "position": pos + Vector3.UP * 0.35, "weapon": gun})
+				items.append({"id": gun.id, "revision": 0, "kind": 1, "subtype": gun.kind, "amount": 1, "position": queries.weapon_drop_position(player), "weapon": gun})
 				player.action = CanonicalCodec.Action.IDLE
 				events.append({"kind": "pickup", "slot": slot})
-		if player.action != CanonicalCodec.Action.IDLE or not frame.has_action("interact") or item.is_empty(): continue
+			continue
+		if player.action != CanonicalCodec.Action.IDLE or not pressed or item.is_empty(): continue
 		var result := player.inventory.add_pickup(item, config)
 		if result.ok: events.append({"kind": "pickup", "slot": slot})
 		elif result.error_code == "SWAP_REQUIRED":

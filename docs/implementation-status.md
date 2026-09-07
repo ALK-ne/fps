@@ -1,6 +1,6 @@
 # 実装状況
 
-更新: 2026-09-07。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+更新: 2026-09-08。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
 
 Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲーム本体を追加した。実装仕様の全38受入を完了したという意味ではない。
 
@@ -32,6 +32,10 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 ```
 
 ## 確認できた証拠
+
+- `artifacts/integration/20260908-030446-069/result.json`: 拾得修正後のSmoke成功。両者Fighting・seq3・同hash、最大poll間隔102/97ms。
+
+- `artifacts/tests/20260908-025942-914/result.json`: Godot 35テスト、Node 17テスト、設計検証成功。同revision競合のSTALE_ITEM、E release制御、床投影と壁際drop探索の修正を含む。追加した実物理テスト35検査成功。A14の通信受入は残る。
 
 - `artifacts/integration/20260907-222504-835/result.json`: 移動・近接・初期化修正後のFullMatch成功。両者10–0、seq31、同hash、最終HP一致。最大poll間隔1151/1172ms、250ms超の処理区間なし。
 

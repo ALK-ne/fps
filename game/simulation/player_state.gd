@@ -19,6 +19,7 @@ var recoil: Vector2 = Vector2.ZERO
 var next_melee_tick: int = 0
 var last_fire: bool = false
 var alive_at_start: bool = true
+var interact_latched: bool = false
 
 var position: Vector3:
 	get: return movement.position
@@ -46,6 +47,7 @@ func reset(round_number: int) -> void:
 	yaw = 0.0
 	pitch = 0.0
 	alive_at_start = true
+	interact_latched = false
 	recoil = Vector2.ZERO
 	last_fire = false
 	next_melee_tick = 0

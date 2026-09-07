@@ -89,6 +89,25 @@ func first_bullet_hit(from: Vector3, to: Vector3, exclude_slot: int) -> Dictiona
 func pickup_target(player: PlayerState, distance: float = 2.0) -> Dictionary:
 	return ray(player.eye(), player.eye() + player.direction() * distance, 9)
 
+func weapon_drop_position(player: PlayerState) -> Vector3:
+	var forward := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
+	var offsets: Array[Vector3] = [forward * 0.7]
+	for index in 8: offsets.append(forward.rotated(Vector3.UP, index * TAU / 8.0) * 0.6)
+	for offset in offsets:
+		var candidate := player.position + offset
+		if not ray(player.position + Vector3.UP * 0.35, candidate + Vector3.UP * 0.35).is_empty(): continue
+		var floor_hit := ray(candidate + Vector3.UP * 1.5, candidate + Vector3.DOWN * 3.0)
+		if floor_hit.is_empty() or floor_hit.normal.y < 0.707: continue
+		var center: Vector3 = floor_hit.position + Vector3.UP * 0.35
+		var query := PhysicsShapeQueryParameters3D.new()
+		var shape := SphereShape3D.new()
+		shape.radius = 0.3
+		query.shape = shape
+		query.transform.origin = center
+		query.collision_mask = 1
+		if arena.get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty(): return center
+	return player.position + Vector3.UP * 0.35
+
 func grenade_sweep(from: Vector3, to: Vector3, radius: float = 0.1) -> Dictionary:
 	var shape := SphereShape3D.new()
 	shape.radius = radius

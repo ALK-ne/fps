@@ -1,6 +1,6 @@
 # 受入実行記録
 
-2026-09-07。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
+2026-09-08。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
 
 | ID | 状態 | 証拠・不足 |
 | --- | --- | --- |
@@ -17,7 +17,7 @@
 | A11 | PARTIAL | 同時死亡・timeout比較unit。完了同tick全組合せ未実施 |
 | A12 | PASS | test_melee: 素手/武器、同時近接の5m/s・damage0、射程/視野外、壁遮蔽/壁停止、sprint中射撃の16検査 |
 | A13 | PASS | 1000seed、chance0/1、銃と弾箱対応、全候補の実衝突余裕、次roundの装備/姿勢/弾/投擲reset |
-| A14 | NOT_RUN | 999/1000ms・全競合・視線中断通信受入未実施 |
+| A14 | PARTIAL | test_pickup_swapの実物理35検査: 999/1000ms、視線/解除中断、両round優先の銃/残量箱競合、drop弾倉保持・release制御、壁際8方向探索。通信下の操作受入は未実施 |
 | A15 | PARTIAL | 弾薬上限・残量unit。reload追加試験と通信未全面検査 |
 | A16 | PARTIAL | 実装済み。全回復行列・通信受入未実施 |
 | A17 | NOT_RUN | 投擲ホイール・全取消入力未実施 |
