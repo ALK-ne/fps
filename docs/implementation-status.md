@@ -33,6 +33,8 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 確認できた証拠
 
+- 最新配布: `release/ArenaDuel-0.1.0.zip`、製品commit `c93fce7`、SHA256 `fb7b73626ede681de6c4c23998d0b252d1cdeedd504bb1e5dfb05ed849904fff`。`artifacts/package/20260907-215731-189/result.json` でinstall、menu/practice、debug引数拒否、追加ファイル保持uninstall、reinstall成功。
+
 - `artifacts/integration/20260907-215137-174/result.json` / `20260907-215405-188/result.json`: 両役の65秒後再起動を拒否しscore0–0を保持。hostが再起動するケースは継続guestのtombstoneで再開を拒否するが、再起動hostは相手に到達できず待機表示のまま。guest再起動ケースは両者がtombstoneを保存し停止。
 - 通信/補間/Sessionの8テスト指定実行成功。相手の期限終了をチェックサム付きで保存すること、保存先をファイルで塞いだ実書込失敗時にStorageErrorになることを含む。
 
@@ -62,4 +64,4 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 次に進める内容
 
-残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPはcommit `3368313`。補間/replay窓の追加後に再ビルドする。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。
+残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `c93fce7` の補間/replay窓/認証競合/期限終了修正を反映済み。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。
