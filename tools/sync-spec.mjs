@@ -12,4 +12,14 @@ const keys={forward:87,back:83,left:65,right:68,jump:32,sprint:4194325,crouch:41
 writeFileSync(out+'input_defaults.json',JSON.stringify(keys,null,2)+'\n');
 manifest.files['input_defaults.json']=createHash('sha256').update(readFileSync(out+'input_defaults.json')).digest('hex');
 writeFileSync(out+'manifest.json',JSON.stringify(manifest,null,2)+'\n');
+// Keep wire compatibility separate from gameplay hashes. Preserve explicit field order.
+const wire=JSON.parse(readFileSync(root+'docs/implementation/wire-vectors.json','utf8'));
+function ordered(t){
+ if(typeof t==='string')return t;
+ if(t.fields)return {fields:Object.entries(t.fields).map(([name,type])=>[name,ordered(type)])};
+ if(t.array)return {...t,array:ordered(t.array)};
+ if(t.tagged)return {tagged:Object.fromEntries(Object.entries(t.tagged).map(([id,s])=>[id,ordered(s)]))};
+ return t;
+}
+writeFileSync(out+'wire_schema.json',JSON.stringify({protocol:wire.protocol,messages:Object.fromEntries(wire.vectors.map(v=>[v.type,ordered(v.schema)])),events:Object.fromEntries(wire.events.map(v=>[v.type,ordered(v.schema)]))})+'\n');
 console.log('Generated game configuration and hash manifest.');

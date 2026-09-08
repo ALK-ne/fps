@@ -1,8 +1,10 @@
 # 実装状況
 
-更新: 2026-09-08。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+更新: 2026-09-09。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
 
 Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲーム本体を追加した。実装仕様の全38受入を完了したという意味ではない。
+
+残設計を別セッションへ渡す場合は[残設計の洗い出し・引き継ぎ](design-handoff.md)を参照。既存設計への追従、不整合の解消、利用者判断を区別している。
 
 | 作業 | 状態 | 成果と残り |
 | --- | --- | --- |
@@ -20,6 +22,20 @@ Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲー�
 | W12 | EXTERNAL_PENDING | 実2家庭の接続・復帰、利用者本人の操作感評価が必要 |
 
 ## 再現コマンド
+
+### 設計v1.1への追従状況
+
+2026-09-09に[改訂記録](design-revision-2026-09-08.md)と06のR1–R6を確認し、R1の基盤を追加した。
+
+- `MessageCodec`: 規範schemaから順序付きローカルschemaを生成し、製品側の独立したbinary reader/writerで全32message・9eventを処理。全切断prefix/末尾余剰、整数幅、非有限float、UTF-8不正、配列上限を検査。schema生成はsync-specへ統合し、rules/map hashとは分離。
+- `MessagePolicy`: 全32typeのchannel/方向/auth段階/phaseを検査。構造decode後に入力値・在庫上限・player値等を検査する受信入口。保存blobのhash/reducer検査や全context条件は今後Session/Storeで接続する。
+- `ActionLedger`: pending16件、完了結果2048件とhighwater。処理中/完了後の重複は再実行せず、cache外はSTALE_ACTION、旧/将来roundはSTALE_ROUND。保持交換のaccepted/complete tickを分離。
+
+**R1は未完了**。以上は検証済みの部品であり、稼働中Sessionはまだ旧canonical/protocol1経路。protocol2/AD2の有効化、全送受信の置換、ActionResultとゲーム処理の接続、全type live検査が残る。旧経路を残した状態を完成扱いしない。R2–R6も未完了、配布ZIPは従来の0.1.0のまま。
+
+検証: `artifacts/tests/20260909-001737-184/result.json` でGodot40件・Node17件・設計6分類PASS。後続の台帳追加とUTF-8検査後、`artifacts/wire-foundation-20260909.log`で通信基盤7テスト・2988検査PASS。既存受入のPARTIALをこの基盤検証だけでPASSへ変更しない。
+
+### 既存コマンド
 
 ```powershell
 pwsh -NoProfile -File tools/bootstrap.ps1
