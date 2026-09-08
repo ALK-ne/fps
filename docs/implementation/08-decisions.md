@@ -59,3 +59,16 @@
 ## 静的検証で修正した箇所
 
 spawn前壁の長さ2.5 mではcapsuleの半径と0.5 mグリッドを考慮した出口に探索ノードが残らず、全spawnが孤立した。前壁を2.0 mへ短縮し、実際の出口幅1.25 mを確保した。さらに近すぎる地点の閾値を20 mへ固定し、同じ側の隣接地点（経路16 m）を除外する。最終可否行列と距離は[検証結果](design-validation.json)に保存する。
+## v1.1決定の追記（2026-09-08）
+
+提供された引き継ぎ課題（docs/design-handoff.md）のS01–S07を、実装HEAD `0d4f58a`と照合して01–07へ反映した。ゲーム定数/承認済みルールは変更しない。
+
+- S01: ShotFiredは全弾初期値を持つ。生成/削除reliable＋移動補正unreliable、baselineは全entityとcutEventSeq、削除後再生成を拒否。
+- S02: 次版はprotocol2/AD2、全32message・9eventをtyped化。現行未記載39/42/50を登録し、ActionTypeのChooseSpawn重複を除去。278byte snapshotを維持。
+- S03: timer/block/result分離、認証した終了診断43–45、再起動側はunknown remaining、30秒の有限試行。無応答から勝敗を推定しない。
+- S04: D08は依然未承認。pending時の保存/画面/再確認と、明示採用後のabortを別設計。一般の続行指示を承認にしない。
+- S05: schema2、first_slotのみ保存、confirmed checkpoint2世代、receiptは現在同様最新1＋highwater。旧schemaは書き換えず再開拒否。
+- S06: guestの予測は移動/ADS、射撃表示は確定後。camera offset/replay/壁/ring溢れ時baselineを具体化。
+- S07: 全受入の残caseをtick/障害点/両役/計測/配布別に具体化。設計用byte vectorの生成から製品受入PASSを推定しない。
+
+この更新の索引と検証範囲は[設計改訂記録](../design-revision-2026-09-08.md)。新しい利用者判断は増やしていない。D08だけがルール承認待ち。

@@ -72,3 +72,8 @@ unitは独立した期待値（例: armor境界、cap、deadline）を持ち、�
 docs/acceptance-run.mdを実装時に作り、run ID、build hash、PC/OS/GPU、解像度/画質、回線、接続経路、RTT、切断観測時刻、再認証/照合完了時刻、score前後、双方画面の記録、ユーザーの評価を埋める。個人の公開IPやsecretは記録しない。
 
 A33/A34は開発側が置く性能目標で、要件の未確定最低動作環境を勝手に承認済みにしたものではない。A36–A38を実行できない場合でもA01–A35のコード/配布成果は完成させ、その3件だけ外部待ちとして報告する。
+## v1.1の具体的な実行仕様
+
+[acceptance-scenarios.md](acceptance-scenarios.md)は本章の規範的な補助仕様。A03の全type vector、A14–19の操作tick/欠落/両役、A21のentity/replay、A23–28のfault×role×phaseと期待prefix、A29–31のUI/音操作、A32–34の測定窓、A35のtest/release exportを実装時にそのままcaseへ起こす。既存の受入ID38件は維持し、各IDの全適用caseで合格して初めてPASS。
+
+[wire-vectors.json](wire-vectors.json)は設計用encoderの出力であり、Godot codecの試験実行結果ではない。A25の「超過は終了」はwindowClosedを意味し、責任証拠なしにforfeitを意味しない。A28は04のunknown/policyPending/historyConflictを区別する。保存状態の整合を確認しただけで利用者のD08承認にしない。

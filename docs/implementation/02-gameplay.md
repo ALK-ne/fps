@@ -23,7 +23,7 @@
 
 地点の確定受理条件は「処理するtick < deadline」。期限tickではタイムアウト抽選が先。途中のPhaseState再送で期限をリセットしない。先手の確定地点だけを相手に送る。loot seed、配置候補の中身、乱数状態は選択画面に送らない。
 
-RoundPreparedは直前ラウンドのwinnerを参照する。winner=-1または初回はCSPRNGから別seedを作り一様に先手を抽選。loot seedと先手seedを分離する。RoundActivatedで正式なround番号を進め、アーマーはscoresでなくround番号から計算する。
+RoundPreparedは直前ラウンドのwinnerを参照する。winner=-1または初回はCSPRNGから別seedを作り一様に先手を抽選。loot seedと先手seedを分離する。保存・共有するのは抽選結果first_slotだけで、RoundPreparedにselectionSeedを含めない。RoundActivatedで正式なround番号を進め、アーマーはscoresでなくround番号から計算する。
 
 ## 1 tickの厳密な処理順
 
@@ -77,9 +77,9 @@ server simulation timeは`floor(tick*1_000_000/60)` μs。連射間隔110000 μs
 
 散布はホストseed＋shot IDから円錐内一様（cosθを一様、φを一様）、散弾8本は別pellet index。head colliderとbody colliderが両方交差したら距離の小さい方。同距離でhead優先。自分の弾は自分に当たらない。弾は敵・壁いずれか最初で消滅、貫通/跳弾なし。
 
-反動pitchは武器の値、yawはその0.2倍以内の符号付き乱数。ホストが確定shot seedを配信。予測側は同shot IDで再生済みなら二重適用しない。反動visual offsetは6°/秒で0へ戻す。次の照準は入力角＋現在反動を使い、画面だけ反動して弾は真っすぐという不一致を作らない。
+反動pitchは武器の値、yawはその0.2倍以内の符号付き乱数。ホストがShotFiredに全弾の初期値と確定反動offsetを配信する。guestは確定通知で一度だけ反動を表示し、snapshotに包含済みの反動を再加算しない。反動visual offsetは6°/秒で0へ戻す。次の照準は入力角＋現在反動を使い、画面だけ反動して弾は真っすぐという不一致を作らない。
 
-銃身のflash/tracer/音は予測可。HitConfirmedはホストから届いてから表示し、推測で敵HPを減らさない。狙い位置の巻き戻しは初版なし。RTTの命中差はA34で評価する。
+v2ではguestの銃身flash/tracer/音はShotFired確認後だけ表示する。DamageConfirmedはホストから届いてから表示し、推測で敵HPを減らさない。狙い位置の巻き戻しは初版なし。RTTの命中差はA34で評価する。
 
 ## 拾得と消費
 

@@ -53,7 +53,7 @@ GDScriptのRefCountedに型付きプロパティを置き、複製は明示的cl
 
 | 型 | 必須フィールド |
 | --- | --- |
-| MatchState | match_id:16 bytes, rule_hash:32 bytes, players:[PlayerIdentity×2], host_slot=0, round:u32, prepared_round:u32(0=なし), scores:[u8×2], phase:Phase, round_status:UNOPENED/PREPARED/OPEN/CLOSED, previous_winner:i8(-1/0/1), match_winner:i8, terminal_reason:enum, last_seq:u64, last_hash:32 bytes, epoch_high_water:u32, last_recovery_epoch:u32, recovery_receipts:Set<id>（保持窓のみ） |
+| MatchState | match_id:16 bytes, rule_hash:32 bytes, players:[PlayerIdentity×2], host_slot=0, round:u32, prepared_round:u32(0=なし), first_slot:u8, map_hash:32 bytes, scores:[u8×2], phase:Phase, round_status:BETWEEN/PREPARED/OPEN/CLOSED, previous_winner:i8(-1/0/1), match_winner:i8, terminal_reason:enum, last_seq:u64, last_hash:32 bytes, epoch_high_water:u32, last_recovery_epoch:u32, recovery_receipts:Set<id>（最新1件＋last_recovery_epoch） |
 | PlayerIdentity | player_id:16 bytes, display_name:String≤24 Unicode文字, slot:u8 |
 | RoundState | round:u32, phase_revision:u32, phase_start_tick:u64, deadline_tick:u64, first_slot:u8, selected_spawn:[i8×2], loot_seed:u64（ホスト専用、選択中は送らない） |
 | PlayerState | slot, position:Vector3, velocity:Vector3, yaw/pitch:float, movement:MovementState, hp_milli:i32, armor_milli:i32, inventory:Inventory, action:ActionState, last_input_seq:u64 |
@@ -64,7 +64,7 @@ GDScriptのRefCountedに型付きプロパティを置き、複製は明示的cl
 | InputFrame | seq:u64, sample_tick:u64, axes:Vector2, yaw/pitch:float, held_buttons:u16, action_refs:Array<u64> |
 | ProjectileState | id:u32, owner:u8, kind:u8, position/velocity:Vector3, spawn_tick:u64, expiry_tick:u64, shot_id:u64, pellet_index:u8 |
 | PickupState | id:u32, revision:u32, kind:u8, subtype:u8, amount:u16, position:Vector3, weapon_instance:optional |
-| RecoveryObservation | match_id, old_epoch:u32, observed_round:u32, last_seq/hash, own_boot_id, peer_boot_id, cause, start_mono_us, start_utc_ms, remaining_ceiling_ms, terminal:bool |
+| RecoveryObservation | match_id, old_epoch:u32, observed_round:u32, last_seq/hash, observer_boot, old_host_boot, old_guest_boot, cause, start_mono_us, start_utc_ms, remaining_ceiling_ms, timer_status, evidence, offender（04のschema2） |
 
 enumの数値はcanonical_codec.gdに1か所だけ定義し、wire/保存/テストで共有する。辞書の列挙順にhashを依存させない。モデルにNode、Resource path、Callableを含めない。
 
@@ -138,3 +138,12 @@ UPnPのdiscoverだけWorkerThreadPoolで実行し、結果をメインへ渡す�
 Result.error_codeはCONFIG_INVALID、VERSION_MISMATCH、AUTH_FAILED、PORT_IN_USE、NETWORK_TIMEOUT、ACTION_REJECTED、STORE_CORRUPT、STORE_WRITE_FAILED、HISTORY_FORK、CLOCK_UNCERTAIN、RECOVERY_EXPIRED。未処理例外で対戦を続けない。
 
 診断はuser://profiles/<name>/logs/のJSONL、5 MB×3本。UTC時刻、boot IDの先頭8文字、phase、round、event ID、codeを記録。秘密鍵・参加コード・認証MAC・完全なIPを記録しない。テストログだけは期待結果とseedを持てる。
+## v1.1の実装差分と所有者
+
+03のwire-schemaと04の保存schemaは別validatorを持つ。新規`game/net/message_codec.gd`はtype→typed payloadのencode/decode、`message_policy.gd`は方向/auth/phase/上限検査、`entity_replica.gd`はguestのID表/event連番/tombstone/保留/baseline適用を所有する。session.gdは検証済みコマンドを物理tick境界へ配送し、UIへdomain状態を通知する。
+
+`game/net/baseline_requester.gd`は同時1件/再試行予算だけを管理し、PredictionとEntityReplicaから共用する。`prediction.gd`は移動ringとcamera offsetを所有、`remote_interpolation.gd`は32 sample、`world_view.gd`は表示用entityとcameraだけを参照する。表示補間をSimulationのdamageに流さない。
+
+`game/recovery/recovery_status.gd`を追加しtimer/block/resultと証拠検査を集中する。RecoveryCoordinatorは同bootの時計権威、RecoveryStoreはschema/永続ACK/保持、Sessionは診断通信と有限retry、DuelUIは状態→文言/操作を担当する。_stop_conflictを汎用終了関数として使わない。
+
+新しいerror_codeはRESYNC_UNAVAILABLE、RECOVERY_UNKNOWN、POLICY_PENDING、LEGACY_SCHEMA、STALE_HISTORYを追加。エラー文字列をそのままwire enumへ変換しない。D08のpolicyはビルド時定数でpending、ユーザー設定にしない。

@@ -1,4 +1,4 @@
-# 実装仕様 v1.0 — ここから実装を開始する
+# 実装仕様 v1.1 — ここから実装を開始する
 
 作成: 2026-09-06。依頼は「実装完了までワンショットで行ける粒度の設計」。本パッケージはその実装指示書であり、ゲーム実装が完了したとの報告ではない。
 
@@ -8,6 +8,10 @@
 2. 本ディレクトリの仕様と [設計データ](spec.json)。委任された初期値・実装判断をここで固定する。
 3. [旧詳細設計v0.2](../detailed-design.md) は背景資料。競合時は本仕様を優先する。
 4. [技術試作](../technical-validation.md) は検証済み範囲の証拠。製品用コードとして無条件に流用しない。
+
+## 2026-09-08の改訂
+
+実装HEAD 0d4f58aを確認し、design-handoffのS01–S07を01–08へ反映した。改訂内容と検証範囲は[設計改訂記録](../design-revision-2026-09-08.md)。03の[wire-schema.mjs](wire-schema.mjs)/[wire-vectors.json](wire-vectors.json)と07の[acceptance-scenarios.md](acceptance-scenarios.md)も規範的な仕様の一部。実装予定はprotocol2/store2であり、現行0.1.0とは接続互換を持たない。D08だけは未承認。
 
 ## 読む順番
 

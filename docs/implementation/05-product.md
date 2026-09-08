@@ -82,3 +82,10 @@ Install.ps1は現在ユーザーのLocalAppData/Programs/ArenaDuel/<version>/へ
 補助ソフトは同梱せず公式導入手順をPLAYへ。Windows Firewallの許可は利用者操作として案内。署名証明書は購入しない。実際のWindows表示をA35に記録する。
 
 build-infoにgame/engine/spec version、rules/map hash、Git commit、UTC build time、release=true。ZIPのhashを作り、空profileでインストール→起動→アンインストールを確認する。
+## 復帰画面のv1.1適用
+
+復帰UIは[04の証拠・保存・画面表](04-recovery.md)を直接使用する。「接続・復帰を待っています」の単一表示で全状態を隠さない。期限が確かな連続側だけ残り60秒を表示し、再起動側の未知remainingは秒数表示なし。「相手に確認できず、再開できません」と「復帰期限が過ぎました」を区別する。
+
+復帰/診断画面は常に「接続へ戻る」を持ち、保存済み勝敗/oldEpoch/期限を変えない。退出確認で勝利や新matchを自動作成しない。再確認は診断だけ、30秒で必ず終わる。未確定D08は「勝敗は未確定です」とし、通常の勝者表示・再戦同意画面へ流さない。利用者は接続画面から別IDの新matchを開始できる。StorageErrorは保存処理再試行を別ボタンにし、状態確認だけで保存成功としない。
+
+cameraはPredictionのeye＋offset、壁越しoffsetを禁止。v2 guestの発砲音/flash/反動は確定通知後に一度だけ再生する。操作感はA34/A38で測り、先行射撃表示を暗黙に追加しない。
