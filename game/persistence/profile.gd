@@ -5,12 +5,18 @@ var root: String
 var player_id: PackedByteArray
 var boot_id: PackedByteArray = DuelIds.random_bytes(16)
 var files := AtomicFiles.new()
+var closed := ClosedIndex.new()
+
+func record_closed(mid: PackedByteArray, block: int, result: int) -> DuelResult:
+	var saved := closed.append(mid, block, result)
+	return closed.prune_details(root) if saved.ok else saved
 
 func open(name_value: String) -> DuelResult:
 	var regex := RegEx.new()
 	regex.compile("^[a-zA-Z0-9_-]{1,32}$")
 	if regex.search(name_value) == null: return DuelResult.failure("INVALID_PROFILE")
 	root = "user://profiles/" + name_value
+	closed.root = root + "/closed-index"
 	var identity := files.load_ab(root + "/identity.json")
 	if identity.ok:
 		if not identity.value.value is PackedByteArray or identity.value.value.size() != 16: return DuelResult.failure("STORE_CORRUPT")

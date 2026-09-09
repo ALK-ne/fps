@@ -1,6 +1,8 @@
 # 実装状況
 
-更新: 2026-09-09。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+更新: 2026-09-10。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+
+最新の実装・検証経過は[継続ログ](implementation-progress-2026-09-10.md)を参照。旧表の未完了項目は全受入確認後に更新する。
 
 Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲーム本体を追加した。実装仕様の全38受入を完了したという意味ではない。
 

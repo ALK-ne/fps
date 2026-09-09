@@ -176,12 +176,13 @@ func pause(practice_mode: bool) -> void:
 func waiting(message: String) -> void:
 	screen = "waiting"
 	base("接続・復帰を待っています", message)
-	button(content, "戻る", "leave_confirm")
+	button(content, "状態を確認", "check_status")
+	button(content, "接続へ戻る", "menu")
 
 func results(session: DuelSession) -> void:
 	screen = "results"
 	var state := session.store.state
-	base("あなたの勝利" if state.match_winner == session.local_slot else "試合終了", "%d  —  %d" % [state.scores[session.local_slot], state.scores[1 - session.local_slot]])
+	base("勝者なし・試合中断" if state.terminal_reason == "RESPONSIBILITY_UNKNOWN" else ("あなたの勝利" if state.match_winner == session.local_slot else "試合終了"), "%d  —  %d" % [state.scores[session.local_slot], state.scores[1 - session.local_slot]])
 	status_label.text = session.status
 	label(content, "再戦同意  %s / %s" % [str(session.rematch_ready[0]), str(session.rematch_ready[1])], 22)
 	button(content, "再戦に同意", "rematch")

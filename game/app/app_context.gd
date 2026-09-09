@@ -49,12 +49,13 @@ func start() -> void:
 		ui.connection()
 		_network()
 		var endpoint := options.endpoint.rsplit(":", true, 1)
+		var invite_path := options.test_invite_file if not options.test_invite_file.is_empty() else "res://../artifacts/scenario-invite.txt"
 		if options.role == "host":
 			r = session.create_room(endpoint[0], int(endpoint[1]))
 			if OS.is_debug_build() and not options.scenario.is_empty():
-				var file := FileAccess.open("res://../artifacts/scenario-invite.txt", FileAccess.WRITE)
+				var file := FileAccess.open(invite_path, FileAccess.WRITE)
 				if file != null: file.store_string(DuelAuth.invitation(session.invitation_data))
-		else: r = session.join_room(FileAccess.get_file_as_string("res://../artifacts/scenario-invite.txt"))
+		else: r = session.join_room(FileAccess.get_file_as_string(invite_path))
 		if not r.ok: _error(r)
 	get_window().focus_exited.connect(func(): router.capture(false))
 	if OS.is_debug_build() and not options.scenario.is_empty():
@@ -146,6 +147,8 @@ func _command(action: String, argument: Variant) -> void:
 			var r := session.restore()
 			ui.waiting(session.status)
 			if not r.ok: _error(r)
+		"check_status":
+			if session != null: session.check_status()
 		"settings":
 			menu_return = "pause" if practice != null or session != null else "menu"
 			router.capture(false)

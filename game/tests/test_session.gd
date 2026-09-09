@@ -1,6 +1,6 @@
 extends RefCounted
 
-func test_remote_expiry_is_durable(a: DuelAssertions) -> void:
+func test_local_expiry_is_durable(a: DuelAssertions) -> void:
 	var session := DuelSession.new()
 	var profile := DuelProfile.new()
 	a.truth(profile.open("expiry_" + DuelIds.random_bytes(6).hex_encode()).ok, "profile")
@@ -8,14 +8,15 @@ func test_remote_expiry_is_durable(a: DuelAssertions) -> void:
 	session.store.initialize(profile, mid)
 	session.session_data = {"epoch": 3}
 	session.resuming = true
-	a.truth(session.store.append_transaction([MatchEvent.make(1, {"match_id": mid, "rule_hash": DuelIds.random_bytes(32), "players": [{"slot": 0}, {"slot": 1}], "epoch": 1})]).ok, "initial durable record")
-	session._dispatch(32, {"terminal": true})
-	a.equal(session.phase, CanonicalCodec.Phase.CONFLICT, "authenticated peer expiry stops gameplay")
+	a.truth(session.store.append_transaction([MatchEvent.make(1, {"match_id": mid, "rule_hash": DuelIds.random_bytes(32), "map_hash": DuelIds.random_bytes(32), "players": [{"slot": 0, "id": DuelIds.random_bytes(16)}, {"slot": 1, "id": DuelIds.random_bytes(16)}], "epoch": 1})]).ok, "initial durable record")
+	session._stop_conflict("RECOVERY_EXPIRED")
+	a.equal(session.phase, CanonicalCodec.Phase.CONFLICT, "local expiry stops gameplay")
 	a.truth(session.recovery.expired, "expiry survives coordinator checks")
 	var saved := session.store.files.load_ab(session.store.root + "/terminal.json")
 	a.truth(saved.ok, "terminal stored with checksum")
-	a.equal(saved.value.value.reason, "RECOVERY_EXPIRED", "durable refusal reason")
-	a.equal(saved.value.value.seq, 1, "references confirmed history")
+	a.equal(saved.value.value.status.timerStatus, 2, "durable expiry evidence")
+	a.equal(saved.value.value.status.resultStatus, 2, "approved abort without responsibility evidence")
+	a.equal(saved.value.value.status.seq, 1, "references confirmed history")
 	a.equal(session.store.state.scores, [0, 0], "no invented wins")
 
 func test_terminal_write_failure_is_visible(a: DuelAssertions) -> void:
@@ -30,3 +31,20 @@ func test_terminal_write_failure_is_visible(a: DuelAssertions) -> void:
 	a.equal(session.phase, CanonicalCodec.Phase.STORAGE_ERROR, "cannot report durable expiry after write failure")
 	a.truth(session.status.contains("STORE_WRITE_FAILED"), "explicit storage failure")
 	a.truth(session.recovery.expired and session.recovery.conflict, "write failure never reopens gameplay")
+
+
+func test_terminal_cannot_be_reopened_by_old_phase(a: DuelAssertions) -> void:
+	var session := DuelSession.new()
+	session.connected = true
+	session.host = true
+	session.store.state.terminal_reason = "RESPONSIBILITY_UNKNOWN"
+	session.store.state.phase = CanonicalCodec.Phase.MATCH_RESULT
+	session.phase = CanonicalCodec.Phase.MATCH_RESULT
+	session.director.phase = CanonicalCodec.Phase.COUNTDOWN
+	session.director.deadline_tick = 1
+	session.tick = 100
+	session.physics(InputFrame.new())
+	a.equal(session.phase, CanonicalCodec.Phase.MATCH_RESULT, "old countdown cannot restart terminal match")
+	session.host = false
+	session._dispatch(23, {"round": 0, "phase": 5, "revision": 999})
+	a.equal(session.phase, CanonicalCodec.Phase.MATCH_RESULT, "late phase message cannot reopen terminal match")

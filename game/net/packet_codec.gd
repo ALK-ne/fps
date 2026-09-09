@@ -40,7 +40,7 @@ func encode(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epoc
 func _packet(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epoch: int, slot: int, channel: int, key: PackedByteArray, flags: int) -> PackedByteArray:
 	var s := StreamPeerBuffer.new()
 	s.put_data("ADU1".to_ascii_buffer())
-	s.put_u16(1)
+	s.put_u16(2)
 	s.put_u16(kind)
 	s.put_data(match_id)
 	s.put_u32(epoch)
@@ -58,9 +58,10 @@ func _packet(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epo
 
 func decode(bytes: PackedByteArray, key: PackedByteArray, match_id: PackedByteArray, channel: int, expected_epoch: int = -1) -> DuelResult:
 	if bytes.size() < 80 or bytes.size() > 1200 or key.size() != 32 or channel not in [0, 1, 2, 3]: return DuelResult.failure("INVALID_PACKET")
+	if bytes.slice(0, 4) != "ADU1".to_ascii_buffer() or bytes.decode_u16(4) != 2: return DuelResult.failure("VERSION_MISMATCH")
 	var body := bytes.slice(0, bytes.size() - 32)
 	if not crypto.constant_time_compare(mac(key, body), bytes.slice(bytes.size() - 32)): return DuelResult.failure("AUTH_FAILED")
-	if body.slice(0, 4) != "ADU1".to_ascii_buffer() or body.decode_u16(4) != 1 or body.slice(8, 24) != match_id: return DuelResult.failure("VERSION_MISMATCH")
+	if body.slice(8, 24) != match_id: return DuelResult.failure("MATCH_MISMATCH")
 	var epoch := body.decode_u32(24)
 	var seq := body.decode_u64(28)
 	var flags := body.decode_u16(38)

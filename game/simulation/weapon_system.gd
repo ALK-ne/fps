@@ -12,7 +12,7 @@ func fire(player: PlayerState, frame: InputFrame, tick: int) -> void:
 	var gun := player.inventory.active()
 	if gun.is_empty() or player.movement.vaulting: return
 	var definition := config.weapon(gun.kind)
-	var pressed := frame.has_action("fire") or (frame.held(InputFrame.FIRE) and not player.last_fire)
+	var pressed := frame.has_action("fire") or (not frame.reliable_edges and frame.held(InputFrame.FIRE) and not player.last_fire)
 	if not frame.held(InputFrame.FIRE) and not pressed: return
 	if not definition.automatic and not pressed: return
 	if player.action == CanonicalCodec.Action.RELOAD and gun.magazine > 0: player.action = CanonicalCodec.Action.IDLE
@@ -36,6 +36,7 @@ func fire(player: PlayerState, frame: InputFrame, tick: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = round_seed ^ next_id
 	var shot_id := next_id
+	var spawned: Array = []
 	var spread: float = definition.adsDegrees if frame.held(InputFrame.ADS) else definition.hipDegrees
 	if not player.movement.grounded and not frame.held(InputFrame.ADS): spread *= 2
 	for pellet in int(definition.pellets):
@@ -44,11 +45,14 @@ func fire(player: PlayerState, frame: InputFrame, tick: int) -> void:
 		var tangent := aim.cross(Vector3.UP).normalized()
 		var up := tangent.cross(aim).normalized()
 		var dir := (aim * cosine + (tangent * cos(angle) + up * sin(angle)) * sqrt(maxf(0, 1 - cosine * cosine))).normalized()
-		if not obstructed:
-			projectiles.append({"id": next_id, "owner": player.slot, "kind": int(gun.kind), "position": muzzle, "velocity": dir * float(definition.bulletSpeed), "expiry_tick": tick + 120, "shot_id": shot_id})
+		var projectile := {"id": next_id, "owner": player.slot, "kind": int(gun.kind), "position": muzzle, "velocity": dir * float(definition.bulletSpeed), "spawn_tick": tick, "expiry_tick": tick + 120, "shot_id": shot_id, "pellet_index": pellet}
+		spawned.append(projectile.duplicate(true))
+		if not obstructed: projectiles.append(projectile)
 		next_id += 1
 	player.recoil += Vector2(deg_to_rad(definition.recoilDegrees), deg_to_rad(definition.recoilDegrees * rng.randf_range(-0.2, 0.2))) * Vector2(-1, 1)
-	events.append({"kind": "shot", "slot": player.slot, "weapon": gun.kind, "position": muzzle, "id": shot_id})
+	events.append({"kind": "shot", "slot": player.slot, "weapon": gun.kind, "weapon_id": gun.id, "position": muzzle, "id": shot_id, "projectiles": spawned, "recoil": player.recoil})
+	if obstructed:
+		for projectile in spawned: events.append({"kind": "projectile_ended", "id": projectile.id, "reason": 2, "point": muzzle, "normal": -forward})
 
 func step(tick: int) -> Array:
 	var damage: Array = []
@@ -58,12 +62,15 @@ func step(tick: int) -> Array:
 		var hit := queries.first_bullet_hit(p.position, to, p.owner)
 		if not hit.is_empty():
 			var collider: Object = hit.collider
+			events.append({"kind": "projectile_ended", "id": p.id, "reason": 1 if collider.has_meta("slot") else 2, "point": hit.position, "normal": hit.normal})
 			if collider.has_meta("slot"):
 				var definition := config.weapon(p.kind)
 				var head: bool = collider.get_meta("head", false)
 				damage.append({"kind": "damage", "target": int(collider.get_meta("slot")), "owner": p.owner, "amount": int(round(float(definition.damage) * 1000 * (float(definition.headMultiplier) if head else 1.0))), "head": head, "shot_id": p.shot_id})
 			projectiles.remove_at(i)
-		elif tick >= p.expiry_tick: projectiles.remove_at(i)
+		elif tick >= p.expiry_tick:
+			events.append({"kind": "projectile_ended", "id": p.id, "reason": 3, "point": to, "normal": Vector3.ZERO})
+			projectiles.remove_at(i)
 		else: p.position = to
 	return damage
 

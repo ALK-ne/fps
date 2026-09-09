@@ -7,6 +7,7 @@ var defaults: Dictionary
 var spawn_pairs: Array
 var rules_hash: PackedByteArray
 var map_hash: PackedByteArray
+const RECOVERY_POLICY := "abort-v1"
 
 func load_data() -> DuelResult:
 	var manifest: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/manifest.json"))
@@ -24,6 +25,7 @@ func load_data() -> DuelResult:
 	map_hash = str(manifest.files["arena.json"]).hex_decode()
 	if rules.match.wins != 10 or rules.match.recoveryMs != 60000:
 		return DuelResult.failure("CONFIG_INVALID", "approved rules")
+	if rules.get("recoveryPolicy") != RECOVERY_POLICY: return DuelResult.failure("CONFIG_INVALID", "recovery policy")
 	return DuelResult.success(self)
 
 func weapon(kind: int) -> Dictionary:

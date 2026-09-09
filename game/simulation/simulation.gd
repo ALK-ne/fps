@@ -40,7 +40,9 @@ func reset_round(number: int, spawn_ids: Array, seed_value: int) -> void:
 	grenade.grenades.clear()
 	grenade.flames.clear()
 	grenade.next_id = 1
+	grenade.next_flame_id = 1
 	pickup.items = LootBuilder.generate(config, seed_value)
+	pickup.next_id = 1
 	events.clear()
 
 func step(frames: Array, current_tick: int) -> Array:

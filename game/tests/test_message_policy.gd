@@ -40,13 +40,13 @@ func test_input_and_inventory_semantics(a: DuelAssertions) -> void:
 	action.argument = 2
 	a.truth(not MessagePolicy.decoded(20, action).ok, "switch argument range")
 	var inv := {"revision": 0, "activeSlot": -1, "weapon0": {"id": 0, "kind": 0, "magazine": 0}, "weapon1": {"id": 0, "kind": 0, "magazine": 0}, "reserveRifle": 120, "reserveShotgun": 30, "reservePistol": 60, "healthSmall": 4, "healthFull": 2, "armorSmall": 4, "armorFull": 2, "frag": 1, "incendiary": 1, "selectedHeal": 1, "selectedGrenade": 1}
-	a.truth(MessagePolicy.decoded(22, {"inventory": inv}).ok, "all inventory caps legal")
+	a.truth(MessagePolicy.decoded(22, {"round": 1, "firstEventSeq": 1, "serverTick": 0, "events": [EntityWire.tagged(4, {"slot": 0, "inventory": inv})]}).ok, "all inventory caps legal")
 	inv.reserveRifle = 121
-	a.equal(MessagePolicy.decoded(22, {"inventory": inv}).error_code, "INVENTORY_CAP", "reserve above cap rejected")
+	a.equal(MessagePolicy.decoded(22, {"round": 1, "firstEventSeq": 1, "serverTick": 0, "events": [EntityWire.tagged(4, {"slot": 0, "inventory": inv})]}).error_code, "INVENTORY_CAP", "reserve above cap rejected")
 	inv.reserveRifle = 120
 	inv.weapon0 = {"id": 1, "kind": 1, "magazine": 24}
 	inv.weapon1 = inv.weapon0.duplicate()
-	a.equal(MessagePolicy.decoded(22, {"inventory": inv}).error_code, "DUPLICATE_WEAPON", "duplicate weapon IDs rejected")
+	a.equal(MessagePolicy.decoded(22, {"round": 1, "firstEventSeq": 1, "serverTick": 0, "events": [EntityWire.tagged(4, {"slot": 0, "inventory": inv})]}).error_code, "DUPLICATE_WEAPON", "duplicate weapon IDs rejected")
 	a.equal(MessagePolicy.decoded(12, {"velocity": {"x": 1025.0, "y": 0.0, "z": 0.0}}).error_code, "VECTOR_RANGE", "velocity has stricter bound")
 
 func test_ingress_validation_order(a: DuelAssertions) -> void:

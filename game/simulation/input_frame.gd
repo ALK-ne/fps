@@ -8,6 +8,7 @@ var yaw: float = 0.0
 var pitch: float = 0.0
 var held_buttons: int = 0
 var actions: Array = []
+var reliable_edges: bool = false
 
 const FIRE = 1
 const ADS = 2

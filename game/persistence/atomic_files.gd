@@ -3,13 +3,20 @@ extends RefCounted
 
 signal fault_reached(point: String)
 var fault_point: String = ""
+var fault_record_type: int = -1
+var current_record_type: int = 0
+var fault_occurrence: int = 1
+var fault_hits: int = 0
 
 func _fault(point: String) -> void:
 	fault_reached.emit(point)
-	if OS.is_debug_build() and fault_point == point:
+	if OS.is_debug_build() and fault_point == point and (fault_record_type < 0 or fault_record_type == current_record_type):
+		fault_hits += 1
+		if fault_hits != fault_occurrence: return
 		print(JSON.stringify({"fault_point": point, "pid": OS.get_process_id()}))
-		# Stop only this test process at an observable, exact persistence boundary.
-		OS.kill(OS.get_process_id())
+		# The external harness owns termination after observing this exact boundary.
+		# Wall-clock time continues; no fake gameplay deadline is introduced.
+		while true: OS.delay_msec(10)
 
 func write_new(path: String, bytes: PackedByteArray) -> DuelResult:
 	if FileAccess.file_exists(path):
@@ -43,7 +50,9 @@ func save_ab(path: String, value: Variant) -> DuelResult:
 	var old := load_ab(path)
 	if not old.ok and old.error_code != "NOT_FOUND": return old
 	var generation: int = int(old.value.generation) + 1 if old.ok else 1
-	var body := CanonicalCodec.encode({"generation": generation, "value": value})
+	if generation < 1: return DuelResult.failure("STORE_WRITE_FAILED", "generation overflow")
+	var body := CanonicalCodec.encode({"schema": 2, "generation": generation, "value": value})
+	if body.size() > 65536: return DuelResult.failure("STORE_WRITE_FAILED", "envelope limit")
 	var wrapped := body.duplicate()
 	wrapped.append_array(DuelIds.digest(body))
 	return _write(path + (".a" if generation % 2 else ".b"), wrapped, true)
@@ -61,6 +70,8 @@ func load_ab(path: String) -> DuelResult:
 		var decoded := CanonicalCodec.decode(body, 65536)
 		if not decoded.ok or not decoded.value is Dictionary: continue
 		var d: Dictionary = decoded.value
+		if d.has("schema") and (not d.schema is int or d.schema != 2 or d.size() != 3): continue
+		if not d.has("schema") and d.size() != 2: continue
 		if not d.has("generation") or not d.has("value") or not d.generation is int or d.generation < 1: continue
 		if best.is_empty() or d.generation > best.generation: best = d
 	if best.is_empty(): return DuelResult.failure("STORE_CORRUPT" if found else "NOT_FOUND")

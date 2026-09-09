@@ -4,6 +4,7 @@ extends RefCounted
 var config: GameConfig
 var queries: ArenaQueries
 var items: Array = []
+var next_id: int = 1
 
 func target(player: PlayerState) -> Dictionary:
 	var hit := queries.pickup_target(player)
@@ -30,6 +31,14 @@ func step(players: Array, frames: Array, tick: int, round_number: int) -> Array:
 			if player.action == CanonicalCodec.Action.SWAP: player.action = CanonicalCodec.Action.IDLE
 			continue
 		var item: Dictionary = targets[slot]
+		if pressed:
+			var stale_request := false
+			for action in frame.actions:
+				if action.kind == "interact" and action.has("target_id"):
+					stale_request = item.is_empty() or item.id != action.target_id or item.revision != action.expected_revision
+			if stale_request:
+				events.append({"kind": "action_rejected", "slot": slot, "reason": "STALE_ITEM"})
+				continue
 		if not item.is_empty() and (item.revision != revisions[slot] or item.amount <= 0):
 			if pressed or player.action == CanonicalCodec.Action.SWAP:
 				events.append({"kind": "action_rejected", "slot": slot, "reason": "STALE_ITEM"})
@@ -39,12 +48,14 @@ func step(players: Array, frames: Array, tick: int, round_number: int) -> Array:
 			if not frame.held(InputFrame.INTERACT) or item.is_empty() or item.id != player.action_target or item.revision != player.action_revision:
 				player.action = CanonicalCodec.Action.IDLE
 			elif tick >= player.action_end_tick:
+				for existing in items: next_id = maxi(next_id, int(existing.id) + 1)
 				var gun: Dictionary = player.inventory.active().duplicate(true)
 				player.inventory.weapons[player.inventory.active_slot] = item.weapon.duplicate(true)
 				player.inventory.revision += 1
 				item.amount = 0
 				item.revision += 1
-				items.append({"id": gun.id, "revision": 0, "kind": 1, "subtype": gun.kind, "amount": 1, "position": queries.weapon_drop_position(player), "weapon": gun})
+				items.append({"id": next_id, "revision": 0, "kind": 1, "subtype": gun.kind, "amount": 1, "position": queries.weapon_drop_position(player), "weapon": gun})
+				next_id += 1
 				player.action = CanonicalCodec.Action.IDLE
 				events.append({"kind": "pickup", "slot": slot})
 			continue

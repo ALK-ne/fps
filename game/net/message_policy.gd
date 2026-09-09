@@ -62,15 +62,56 @@ static func decoded(kind: int, data: Dictionary) -> DuelResult:
 			if data.player0.slot != 0 or data.player1.slot != 1: return DuelResult.failure("INVALID_SLOT")
 			for player in [data.player0, data.player1]:
 				if player.hp < 0 or player.hp > 100000 or player.armor < 0 or player.armor > player.armorMax or player.armorMax != MatchReducer.armor_for_round(data.round) * 1000 or player.flags & ~15: return DuelResult.failure("INVALID_PLAYER")
+			if kind == 24:
+				for pair in [["projectiles", 1], ["grenades", 2], ["flames", 3], ["pickups", 4]]:
+					var ids: Dictionary = {}
+					for entity in data[pair[0]]:
+						if ids.has(entity.id) or not _entity(pair[1], entity): return DuelResult.failure("INVALID_ENTITY")
+						ids[entity.id] = true
+		22:
+			if data.firstEventSeq < 1: return DuelResult.failure("INVALID_EVENT_SEQ")
+			for event in data.events:
+				var p: Dictionary = event.payload
+				match int(event.type):
+					1:
+						var ids: Dictionary = {}
+						for projectile in p.projectiles:
+							if not _entity(1, projectile) or projectile.owner != p.owner or projectile.shotId != p.shotId or ids.has(projectile.id): return DuelResult.failure("INVALID_ENTITY")
+							ids[projectile.id] = true
+						if p.projectiles.size() != (8 if p.projectiles[0].kind == 2 else 1): return DuelResult.failure("INVALID_ENTITY")
+					3:
+						if p.amountMilli <= 0: return DuelResult.failure("INVALID_DAMAGE")
+					5, 6, 7:
+						if not _entity({5: 4, 6: 2, 7: 3}[int(event.type)], p): return DuelResult.failure("INVALID_ENTITY")
 		31:
 			if data.ackKind == 0:
 				for byte in data.checkpointHash:
 					if byte != 0: return DuelResult.failure("INVALID_ACK")
-		32, 35, 36:
+		32:
+			if data.continuous == 0:
+				if data.remainingMs != 0xffffffff: return DuelResult.failure("INVALID_DEADLINE")
+			elif data.remainingMs > 60000: return DuelResult.failure("INVALID_DEADLINE")
+		35, 36:
 			if data.remainingMs > 60000: return DuelResult.failure("INVALID_DEADLINE")
 		34:
 			if (data.done == 1 and not data.record.is_empty()) or (data.done == 0 and data.record.size() < 128): return DuelResult.failure("INVALID_HISTORY")
 	return DuelResult.success()
+
+static func _entity(kind: int, p: Dictionary) -> bool:
+	if p.id < 1: return false
+	if kind <= 3:
+		if p.expiryTick <= p.spawnTick or p.expiryTick - p.spawnTick != [0, 120, 150, 300][kind]: return false
+		if kind == 1 and (p.shotId < 1 or p.pelletIndex > (7 if p.kind == 2 else 0)): return false
+		if kind == 3 and (p.nextDamageTick <= p.spawnTick or p.nextDamageTick > p.expiryTick): return false
+	else:
+		if p.subtype < 1 or p.subtype > [0, 3, 3, 4, 2][p.kind]: return false
+		if p.kind == 1:
+			if p.amount > 1 or p.weapon.id < 1 or p.weapon.kind != p.subtype or p.weapon.magazine > [0, 24, 6, 12][p.subtype]: return false
+		elif p.weapon.kind != 0 or p.weapon.id != 0 or p.weapon.magazine != 0: return false
+		if p.kind == 2 and p.amount > [0, 120, 30, 60][p.subtype]: return false
+		if p.kind == 3 and p.amount > [0, 4, 2, 4, 2][p.subtype]: return false
+		if p.kind == 4 and p.amount > 2: return false
+	return true
 
 static func _tree(value: Variant, field: String = "") -> String:
 	if value is Array:

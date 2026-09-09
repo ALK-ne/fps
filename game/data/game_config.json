@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "specVersion": "1.0.0",
+  "recoveryPolicy": "abort-v1",
   "engine": {
     "version": "4.7.2-stable", "renderer": "gl_compatibility", "physics": "GodotPhysics3D",
     "platform": "windows-x86_64", "language": "GDScript",

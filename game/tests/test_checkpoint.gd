@@ -6,9 +6,9 @@ func test_compaction_and_fallback(a: DuelAssertions) -> void:
 	var mid := DuelIds.random_bytes(16)
 	var store := RecoveryStore.new()
 	store.initialize(profile, mid)
-	a.truth(store.append_transaction([MatchEvent.make(1, {"match_id": mid, "rule_hash": DuelIds.random_bytes(32), "players": [{"slot": 0}, {"slot": 1}], "epoch": 1})]).ok, "created")
+	a.truth(store.append_transaction([MatchEvent.make(1, {"match_id": mid, "rule_hash": DuelIds.random_bytes(32), "map_hash": DuelIds.random_bytes(32), "players": [{"slot": 0, "id": DuelIds.random_bytes(16)}, {"slot": 1, "id": DuelIds.random_bytes(16)}], "epoch": 1})]).ok, "created")
 	for round_number in range(1, 2001):
-		var result := store.append_transaction([MatchEvent.make(2, {"round": round_number}), MatchEvent.make(3, {"round": round_number}), MatchEvent.make(4, {"round": round_number, "winner": -1})])
+		var result := store.append_transaction([MatchEvent.make(2, {"round": round_number, "first_slot": round_number % 2}), MatchEvent.make(3, {"round": round_number}), MatchEvent.make(4, {"round": round_number, "winner": -1, "reason": 1, "closed_tick": 100})])
 		if not result.ok:
 			a.truth(false, "draw round %d" % round_number)
 			return

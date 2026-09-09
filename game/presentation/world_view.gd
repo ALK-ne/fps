@@ -20,6 +20,7 @@ var head_hit: bool = false
 var local_slot: int = 0
 var frame_times: Array = []
 var remote_interpolation := RemoteInterpolation.new()
+var prediction: Prediction
 
 func build(cfg: GameConfig) -> void:
 	config = cfg
@@ -96,6 +97,7 @@ func present(settings: SettingsStore, frame: InputFrame, delta: float) -> void:
 				play("step", player.position, 20, -8 if player.movement.crouched else 0)
 	var local: PlayerState = simulation.players[local_slot]
 	camera.position = local.eye()
+	if prediction != null and local_slot == 1: camera.position += prediction.advance_camera(delta)
 	camera.rotation = Vector3(frame.pitch + local.recoil.x, frame.yaw + local.recoil.y, 0)
 	camera.fov = lerpf(camera.fov, float(settings.values.verticalFov) * (0.8 if frame.held(InputFrame.ADS) else 1.0), minf(1, delta / 0.12))
 	var gun := local.inventory.active()
@@ -112,6 +114,7 @@ func present(settings: SettingsStore, frame: InputFrame, delta: float) -> void:
 	_sync_entities(simulation.grenade.grenades, grenade_meshes, Color("ffb45b"), Vector3.ONE * 0.2)
 	var flame_data: Array = []
 	for flame in simulation.grenade.flames:
+		if simulation.tick >= flame.expiry_tick: continue
 		for i in flame.cells.size(): flame_data.append({"id": int(flame.id) * 100 + i, "position": flame.cells[i] + Vector3.UP * 0.15})
 	_sync_entities(flame_data, flame_meshes, Color("ff714b"), Vector3(0.4, 0.3, 0.4))
 	trajectory_mesh.visible = local.action == CanonicalCodec.Action.GRENADE_AIM
@@ -125,10 +128,15 @@ func present(settings: SettingsStore, frame: InputFrame, delta: float) -> void:
 func _sync_entities(data: Array, meshes: Dictionary, color: Color, size: Vector3) -> void:
 	var active: Dictionary = {}
 	for entity in data:
+		if entity.get("hidden", false): continue
 		var id: int = entity.id
 		active[id] = true
 		if not meshes.has(id): meshes[id] = _mesh(self, BoxMesh.new(), entity.position, size, color)
-		meshes[id].position = entity.position
+		if entity.get("display_remaining", 0.0) > 0:
+			var remaining: float = entity.display_remaining
+			entity.display_remaining = maxf(0, remaining - get_process_delta_time())
+			entity.display_offset *= entity.display_remaining / remaining
+		meshes[id].position = entity.position + entity.get("display_offset", Vector3.ZERO)
 	for id in meshes.keys():
 		if not active.has(id):
 			meshes[id].queue_free()

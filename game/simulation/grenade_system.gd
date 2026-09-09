@@ -6,6 +6,7 @@ var queries: ArenaQueries
 var grenades: Array = []
 var flames: Array = []
 var next_id: int = 1
+var next_flame_id: int = 1
 var events: Array = []
 
 func throw_from(player: PlayerState, tick: int) -> DuelResult:
@@ -14,12 +15,12 @@ func throw_from(player: PlayerState, tick: int) -> DuelResult:
 	var speed: float = config.rules.grenades.frag.speed if kind == 1 else config.rules.grenades.incendiary.speed
 	var origin := player.eye() + player.direction() * 0.5
 	if not queries.ray(player.eye(), origin).is_empty(): origin = player.eye()
-	grenades.append({"id": next_id, "owner": player.slot, "kind": kind, "position": origin, "velocity": player.direction() * speed, "expiry_tick": tick + 150})
+	grenades.append({"id": next_id, "owner": player.slot, "kind": kind, "position": origin, "velocity": player.direction() * speed, "spawn_tick": tick, "expiry_tick": tick + 150})
 	next_id += 1
 	player.inventory.grenades[kind - 1] -= 1
 	player.inventory.revision += 1
 	player.action = CanonicalCodec.Action.IDLE
-	events.append({"kind": "throw", "slot": player.slot})
+	events.append({"kind": "throw", "slot": player.slot, "grenade": grenades.back().duplicate(true)})
 	return DuelResult.success()
 
 func trajectory(player: PlayerState) -> Array[Vector3]:
@@ -53,6 +54,7 @@ func step(players: Array, tick: int) -> Array:
 				break
 			grenade.position = hit.position + hit.normal * 0.02
 			if grenade.kind == 2:
+				events.append({"kind": "entity_removed", "entity_kind": 2, "id": grenade.id, "reason": 2})
 				_ignite(grenade, tick)
 				ignited = true
 				break
@@ -61,12 +63,13 @@ func step(players: Array, tick: int) -> Array:
 		if ignited:
 			grenades.remove_at(i)
 		elif tick >= grenade.expiry_tick:
+			events.append({"kind": "entity_removed", "entity_kind": 2, "id": grenade.id, "reason": 1 if grenade.kind == 1 else 3})
 			if grenade.kind == 1:
 				for player: PlayerState in players:
 					var center := Vector3(player.position.x, clampf(grenade.position.y, player.position.y + 0.35, player.position.y + 1.45), player.position.z)
 					var distance := maxf(0, center.distance_to(grenade.position) - 0.35)
 					if distance < 4 and queries.explosion_visible(grenade.position, player):
-						damage.append({"kind": "damage", "target": player.slot, "owner": grenade.owner, "amount": int(round(100000 * (1 - distance / 4) * (0.5 if player.slot == grenade.owner else 1.0))), "head": false, "shot_id": grenade.id})
+						damage.append({"kind": "damage", "target": player.slot, "owner": grenade.owner, "amount": int(round(100000 * (1 - distance / 4) * (0.5 if player.slot == grenade.owner else 1.0))), "head": false, "hit_kind": 2, "shot_id": grenade.id})
 				events.append({"kind": "explosion", "position": grenade.position})
 			grenades.remove_at(i)
 	for i in range(flames.size() - 1, -1, -1):
@@ -76,9 +79,11 @@ func step(players: Array, tick: int) -> Array:
 			for player: PlayerState in players:
 				for cell: Vector3 in flame.cells:
 					if absf(player.position.y - cell.y) < 0.4 and Vector2(player.position.x - cell.x, player.position.z - cell.z).length() <= 0.6:
-						damage.append({"kind": "damage", "target": player.slot, "owner": flame.owner, "amount": 4000 if player.slot == flame.owner else 8000, "head": false, "shot_id": flame.id})
+						damage.append({"kind": "damage", "target": player.slot, "owner": flame.owner, "amount": 4000 if player.slot == flame.owner else 8000, "head": false, "hit_kind": 3, "shot_id": flame.id})
 						break
-		if tick >= flame.expiry_tick: flames.remove_at(i)
+		if tick >= flame.expiry_tick:
+			events.append({"kind": "entity_removed", "entity_kind": 3, "id": flame.id, "reason": 3})
+			flames.remove_at(i)
 	return damage
 
 func _ignite(grenade: Dictionary, tick: int) -> void:
@@ -101,4 +106,7 @@ func _ignite(grenade: Dictionary, tick: int) -> void:
 		cells.append(cell)
 		for dir in [Vector3(0.5, 0, 0), Vector3(-0.5, 0, 0), Vector3(0, 0, 0.5), Vector3(0, 0, -0.5)]:
 			if queries.ray(cell + Vector3.UP * 0.1, cell + dir + Vector3.UP * 0.1).is_empty(): queue.append(cell + dir)
-	flames.append({"id": grenade.id, "owner": grenade.owner, "cells": cells, "expiry_tick": tick + 300, "next_damage_tick": tick + 15})
+	if cells.is_empty(): return
+	flames.append({"id": next_flame_id, "owner": grenade.owner, "cells": cells, "spawn_tick": tick, "expiry_tick": tick + 300, "next_damage_tick": tick + 15})
+	next_flame_id += 1
+	events.append({"kind": "flame_created", "flame": flames.back().duplicate(true)})

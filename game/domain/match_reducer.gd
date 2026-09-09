@@ -31,11 +31,13 @@ func apply(state: MatchState, event: MatchEvent) -> DuelResult:
 			if p.match_id.size() != 16 or p.rule_hash.size() != 32 or p.players.size() != 2: return _invalid()
 			s.match_id = p.match_id
 			s.rule_hash = p.rule_hash
+			s.map_hash = p.get("map_hash", PackedByteArray())
 			s.players = p.players.duplicate(true)
 			s.epoch_high_water = p.epoch
 		types.ROUND_PREPARED:
 			if not p.has("round") or s.round_status not in ["UNOPENED", "CLOSED"] or p.round != s.round + 1: return _invalid()
 			s.prepared_round = p.round
+			s.first_slot = p.get("first_slot", 0)
 			s.round_status = "PREPARED"
 			s.phase = CanonicalCodec.Phase.OPENING
 		types.ROUND_ACTIVATED:
@@ -48,7 +50,7 @@ func apply(state: MatchState, event: MatchEvent) -> DuelResult:
 			_close(s, p.winner)
 		types.RECOVERY_RESOLVED:
 			if p.old_epoch < 1 or p.new_epoch <= p.old_epoch or p.round != s.round: return _invalid()
-			if p.disposition != CanonicalCodec.Disposition.KEEP and p.offender not in [0, 1]: return _invalid()
+			if p.disposition in [CanonicalCodec.Disposition.CLOSE, CanonicalCodec.Disposition.FORFEIT] and p.offender not in [0, 1]: return _invalid()
 			match int(p.disposition):
 				CanonicalCodec.Disposition.CLOSE:
 					if s.round_status != "OPEN": return _invalid()
@@ -61,7 +63,12 @@ func apply(state: MatchState, event: MatchEvent) -> DuelResult:
 					s.match_winner = 1 - int(p.offender)
 					s.terminal_reason = "DISCONNECT_TIMEOUT"
 					s.phase = CanonicalCodec.Phase.MATCH_RESULT
-				_: return DuelResult.failure("D08_UNAPPROVED")
+				CanonicalCodec.Disposition.ABORT:
+					if p.offender != -1 or GameConfig.RECOVERY_POLICY != "abort-v1": return _invalid()
+					s.match_winner = -1
+					s.terminal_reason = "RESPONSIBILITY_UNKNOWN"
+					s.phase = CanonicalCodec.Phase.MATCH_RESULT
+				_: return _invalid()
 			s.last_recovery_epoch = p.old_epoch
 			s.epoch_high_water = maxi(s.epoch_high_water, p.new_epoch)
 			s.recovery_receipts = {str(p.recovery_id): true}

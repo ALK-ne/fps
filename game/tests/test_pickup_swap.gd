@@ -41,13 +41,14 @@ func test_swap_duration_release_and_cancel(a: DuelAssertions) -> void:
 	a.equal(events.size(), 1, "1000ms commits once despite duplicate press")
 	a.equal(player.inventory.active().id, 910, "new gun equipped")
 	var dropped: Dictionary = sim.pickup.items[1]
-	a.equal([dropped.id, dropped.weapon.magazine], [1, 7], "drop preserves identity and partial magazine")
+	a.equal([dropped.weapon.id, dropped.weapon.magazine], [1, 7], "drop preserves weapon identity and partial magazine")
+	a.truth(dropped.id > item.id, "new pickup entity never reuses a prior entity ID")
 	a.truth(dropped.position.distance_to(Vector3(0, 0.35, -0.7)) < 0.01, "drop projected onto floor ahead")
 	view.sync_items()
 	player.pitch = -atan2(1.27, 0.7)
 	await tree.physics_frame
 	await tree.physics_frame
-	a.equal(sim.pickup.target(player).get("id"), 1, "real ray can target dropped gun")
+	a.equal(sim.pickup.target(player).get("id"), dropped.id, "real ray can target dropped gun")
 	sim.pickup.step(sim.players, [_frame(true), InputFrame.new()], 61, 1)
 	a.equal(player.action, CanonicalCodec.Action.IDLE, "held E cannot reacquire drop")
 	sim.pickup.step(sim.players, [InputFrame.new(), InputFrame.new()], 62, 1)

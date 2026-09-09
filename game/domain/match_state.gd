@@ -3,6 +3,8 @@ extends RefCounted
 
 var match_id: PackedByteArray = PackedByteArray()
 var rule_hash: PackedByteArray = PackedByteArray()
+var map_hash: PackedByteArray = PackedByteArray()
+var first_slot: int = 0
 var players: Array = []
 var round: int = 0
 var prepared_round: int = 0
@@ -19,7 +21,7 @@ var last_recovery_epoch: int = 0
 var recovery_receipts: Dictionary = {}
 
 func to_data() -> Dictionary:
-	return {"match_id": match_id, "rule_hash": rule_hash, "players": players, "round": round,
+	return {"match_id": match_id, "rule_hash": rule_hash, "map_hash": map_hash, "first_slot": first_slot, "players": players, "round": round,
 		"prepared_round": prepared_round, "scores": scores, "phase": phase, "round_status": round_status,
 		"previous_winner": previous_winner, "match_winner": match_winner, "terminal_reason": terminal_reason,
 		"last_seq": last_seq, "last_hash": last_hash, "epoch_high_water": epoch_high_water,
