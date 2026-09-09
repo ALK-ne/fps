@@ -3,12 +3,13 @@
 Godot 4.7.2のゲーム本体を実装中。練習、実ENet対戦、10勝決着、両役の30秒再起動復帰をローカルで検証しています。全受入の完了ではありません。
 
 - [実装状況と残りの作業](docs/implementation-status.md)
+- [最新の実装・検証ログ（9月10日）](docs/implementation-progress-2026-09-10.md)
 - [38項目の受入実行記録](docs/acceptance-run.md)
 - [起動・操作・接続方法](packaging/PLAY.md)
 
-開発起動は `tools/godot/4.7.2/Godot_v4.7.2-stable_win64.exe --path game`。エンジンの取得は `pwsh -File tools/bootstrap.ps1`。Windows配布物は `pwsh -File tools/package.ps1 -Version 0.1.0` で生成します。
+開発起動は `tools/godot/4.7.2/Godot_v4.7.2-stable_win64.exe --path game`。エンジンの取得は `pwsh -File tools/bootstrap.ps1`。Windows配布物は `pwsh -File tools/package.ps1 -Version 0.2.0` で生成します。
 
-実装は **[実装仕様v1.0](docs/implementation/README.md)** から開始する。ファイル/API、ルール、通信/復元、画面、配布、12作業単位、38受入項目を定義している。
+実装は **[実装仕様v1.1](docs/implementation/README.md)** から開始する。ファイル/API、ルール、通信/復元、画面、配布、12作業単位、38受入項目を定義している。
 
 - [承認済み要件](docs/requirements.md)
 - [詳細設計 初稿v0.1](docs/detailed-design-v0.1.md)

@@ -133,6 +133,7 @@ func join_room(code: String) -> DuelResult:
 func restore() -> DuelResult:
 	var current := profile.files.load_ab(profile.root + "/current-match.json")
 	if not current.ok: return current
+	if not StoreSchema.bytes(current.value.value, 16): return DuelResult.failure("STORE_CORRUPT")
 	var mid: PackedByteArray = current.value.value
 	store.initialize(profile, mid)
 	var saved := store.files.load_ab(store.root + "/session.json")
@@ -142,15 +143,17 @@ func restore() -> DuelResult:
 	if not decoded_session.ok: return decoded_session
 	session_data = decoded_session.value
 	invitation_data = session_data.invitation
+	if invitation_data.match != mid.hex_encode(): return DuelResult.failure("HISTORY_FORK")
 	if invitation_data.get("v") != 2: return DuelResult.failure("LEGACY_SCHEMA")
 	if invitation_data.rules != config.rules_hash.hex_encode(): return DuelResult.failure("VERSION_MISMATCH")
+	if invitation_data.map != config.map_hash.hex_encode(): return DuelResult.failure("VERSION_MISMATCH")
 	var terminal := store.files.load_ab(store.root + "/terminal.json")
 	if not terminal.ok and terminal.error_code != "NOT_FOUND": return terminal
 	var history := store.load_match(mid)
 	if not history.ok: return history
 	if store.legacy: return DuelResult.failure("LEGACY_SCHEMA")
 	if terminal.ok:
-		if not terminal.value.value is Dictionary or not terminal.value.value.has_all(["policy", "status"]) or terminal.value.value.policy != GameConfig.RECOVERY_POLICY or not RecoveryStatus.validate(terminal.value.value.status, store.state): return DuelResult.failure("STORE_CORRUPT")
+		if not terminal.value.value is Dictionary or not StoreSchema.exact(terminal.value.value, ["policy", "status"]) or terminal.value.value.policy != GameConfig.RECOVERY_POLICY or not terminal.value.value.status is Dictionary or not RecoveryStatus.validate(terminal.value.value.status, store.state): return DuelResult.failure("STORE_CORRUPT")
 		terminal_status = terminal.value.value.status
 		diagnostic_only = true
 	host = session_data.host
@@ -159,7 +162,10 @@ func restore() -> DuelResult:
 	epoch = int(session_data.epoch)
 	old_connection_epoch = epoch
 	var observation := store.files.load_ab(store.root + "/observations/%d.json" % epoch)
-	if observation.ok: recovery.observation = observation.value.value
+	if not observation.ok and observation.error_code != "NOT_FOUND": return observation
+	if observation.ok:
+		if not StoreSchema.observation(observation.value.value, epoch): return DuelResult.failure("STORE_CORRUPT")
+		recovery.observation = observation.value.value
 	if store.state.is_terminal() and terminal_status.is_empty():
 		terminal_status = RecoveryStatus.create(store.state, maxi(1, epoch), profile.boot_id, recovery.observation, "TERMINAL", -1)
 		diagnostic_only = true
@@ -611,6 +617,9 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 				_stop_conflict("STORE_WRITE_FAILED")
 				return
 			terminal_status = notice
+			if not profile.record_closed(store.state.match_id, notice.resumeBlock, notice.resultStatus).ok:
+				_stop_conflict("STORE_WRITE_FAILED")
+				return
 			recovery.expired = notice.timerStatus == 2
 			recovery.conflict = true
 			diagnostic_only = true
@@ -700,6 +709,7 @@ func _after_ack(next: String) -> void:
 			phase = director.phase
 			_publish_phase()
 		"recovered":
+			if diagnostic_only: return
 			_finish_resume()
 			_after_ack("prepare")
 
@@ -997,6 +1007,10 @@ func _commit_recovery(d: Dictionary) -> void:
 	store.files._fault("after_recovery_commit")
 
 func _finish_resume() -> void:
+	var pruned := store.prune_observations()
+	if not pruned.ok:
+		_stop_conflict(pruned.error_code)
+		return
 	var info: Dictionary = peers[active_peer]
 	session_data.host_boot = profile.boot_id if host else info.host_boot
 	session_data.guest_boot = info.guest_boot if host else profile.boot_id
@@ -1014,8 +1028,11 @@ func _finish_resume() -> void:
 	_set_status("勝者なし・得点不変で試合を中断しました。" if store.state.terminal_reason == "RESPONSIBILITY_UNKNOWN" else "復帰が完了しました。")
 
 func _stop_conflict(reason: String) -> void:
+	# An already committed receipt is never replaced by a second timeout outcome.
+	if reason == "RECOVERY_EXPIRED" and store.state.last_recovery_epoch == _old_epoch() and store.state.last_recovery_epoch > 0:
+		reason = "RECOVERY_ACK_TIMEOUT"
 	recovery.conflict = true
-	if reason == "RECOVERY_EXPIRED":
+	if reason in ["RECOVERY_EXPIRED", "RECOVERY_ACK_TIMEOUT"]:
 		recovery.expired = true
 	var boot := profile.boot_id if profile != null else DuelIds.random_bytes(16)
 	terminal_status = RecoveryStatus.create(store.state, maxi(1, _old_epoch()), boot, recovery.observation, reason, _offender())
@@ -1027,6 +1044,8 @@ func _stop_conflict(reason: String) -> void:
 	if diagnostic_until_ms == 0: diagnostic_until_ms = Time.get_ticks_msec() + 30000
 	phase = CanonicalCodec.Phase.STORAGE_ERROR if reason.begins_with("STORE") else CanonicalCodec.Phase.CONFLICT
 	_set_status(RecoveryStatus.message(terminal_status) + " " + reason)
+	if reason == "RECOVERY_ACK_TIMEOUT":
+		_set_status("復帰記録は保存済みですが、期限内の最終確認を完了できませんでした。得点を保持して状態を確認します。")
 	if reason == "RECOVERY_EXPIRED" and _offender() < 0:
 		_set_status("復帰期限が過ぎたため、勝者なし・得点不変で試合を中断しました。相手との終了合意は未確認です。")
 	phase_changed.emit()

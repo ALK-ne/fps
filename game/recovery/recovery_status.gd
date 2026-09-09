@@ -13,10 +13,11 @@ static func notice_id(mid: PackedByteArray, old_epoch: int, result: int, observa
 	return DuelIds.digest(stream.data_array).slice(0, 16)
 
 static func create(state: MatchState, old_epoch: int, boot: PackedByteArray, observation: Dictionary, reason: String, offender: int) -> Dictionary:
-	var expired := reason == "RECOVERY_EXPIRED"
+	var expired := reason in ["RECOVERY_EXPIRED", "RECOVERY_ACK_TIMEOUT"]
 	var uncertain := reason == "CLOCK_UNCERTAIN"
 	var block := 1 if expired else (6 if uncertain else (4 if reason.begins_with("STORE") else 3))
 	var result := (1 if offender >= 0 else 2) if expired else 0
+	if reason == "RECOVERY_ACK_TIMEOUT": result = 0
 	var evidence := (17 if expired else 0) | (2 if offender >= 0 else 0)
 	if state.is_terminal():
 		block = 1

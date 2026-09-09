@@ -49,3 +49,15 @@
 - 終了詳細100件保持は実テスト専用ディレクトリで検証し、保存IDの永久拒否インデックスを残す整理を製品経路へ接続。
 - Windows Acceptanceのdebug exe/PCKを出力済み。最初の起動検証`20260910-020906-513`は公式templateがmain-pack引数を拒否してFAIL。隣接PCK自動読込へ修正し再検証中。release ZIPはまだ更新していない。
 - 診断/物体保留の上限、ID寿命、保存sessionの固定キー検査を追加。Entitiesの最初の通信試験`20260910-021151-825`は、採取時刻の違う報告を即比較してFAIL。仕様の2秒収束待ちへ修正し再検証中。
+
+## 追加実装・検証（02:30以降）
+
+- 全回帰: Godot58件・Node17件PASS、`artifacts/tests/20260910-022542-457`。その後追加した最終ACK期限回帰を含む10件も個別PASS。
+- 受入用プリセットを生成元`.in`へ追加し、sync-specで消失する不具合を修正。export-acceptance自身が生成を実行する。
+- Windows Acceptance exe実行: Inventory両役 `20260910-022034-534`、host30秒再起動復帰 `20260910-022108-579`、Entities両役 `20260910-022355-363` PASS。いずれも`artifacts/integration/<ID>/result.json`。
+- Entity baseline遅着で新しい補正位置を巻き戻す不具合を修正。cut再演算後も最新の位置を保持し、古い保留補正を削除。通知重複なしを含む6検査PASS。
+- 保存ファイルは長さ検査後に読む。record 8KiB / checkpoint 16KiB / A-B 64KiB+SHA / index 1MiBまで。過大な新世代A-Bから旧世代へfallbackする回帰を追加。
+- 終了通知の受信側も終了IDへ登録。保存sessionの両役復元・余分キー/float/別profile拒否、復帰時のcurrent-match/マップ/終了通知/観測の型検査を補強。
+- 観測記録は確定receiptのhighwater確認後に直近解決済み2 epochを残して整理。未解決の記録は削除しない。
+- 保存済みRecoveryResolvedの最終ACKが期限後に届いても新しい中断/失点を作らず、操作停止を維持する回帰を追加。これで復帰の全障害matrixが完了したわけではない。
+- 配布スクリプトの既定版を0.2.0、build-infoをspec1.1/protocol2/store2へ更新。`implementation_complete=false`を維持。

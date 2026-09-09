@@ -2,6 +2,7 @@
 param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+& (Join-Path $PSScriptRoot 'sync-spec.ps1')
 $godot = Join-Path $PSScriptRoot 'godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe'
 $output = Join-Path $root 'artifacts/acceptance-build'
 New-Item -ItemType Directory -Force $output | Out-Null

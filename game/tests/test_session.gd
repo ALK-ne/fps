@@ -1,5 +1,23 @@
 extends RefCounted
 
+func test_late_recovery_ack_does_not_add_penalty(a: DuelAssertions) -> void:
+	var session := DuelSession.new()
+	session.store.root = "user://tests/late_ack_" + DuelIds.random_bytes(8).hex_encode()
+	session.store.state.match_id = DuelIds.random_bytes(16)
+	session.store.state.last_hash = DuelIds.random_bytes(32)
+	session.store.state.last_seq = 4
+	session.store.state.last_recovery_epoch = 3
+	session.store.state.scores = [0, 1]
+	session.session_data = {"epoch": 3}
+	session._stop_conflict("RECOVERY_EXPIRED")
+	a.equal(session.terminal_status.resultStatus, 0, "no new abort or forfeit after committed recovery")
+	a.equal(session.terminal_status.timerStatus, 2, "deadline evidence retained")
+	a.equal(session.store.state.scores, [0, 1], "confirmed penalty unchanged")
+	a.equal(session.store.state.last_seq, 4, "no second record invented")
+	a.truth(session.diagnostic_only, "late confirmation cannot reopen gameplay")
+	session._after_ack("recovered")
+	a.truth(session.diagnostic_only, "late disk ACK preserves interlock")
+
 func test_local_expiry_is_durable(a: DuelAssertions) -> void:
 	var session := DuelSession.new()
 	var profile := DuelProfile.new()

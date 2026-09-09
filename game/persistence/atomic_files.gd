@@ -8,6 +8,17 @@ var current_record_type: int = 0
 var fault_occurrence: int = 1
 var fault_hits: int = 0
 
+static func read_bounded(path: String, limit: int) -> PackedByteArray:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return PackedByteArray()
+	var length := file.get_length()
+	if length < 1 or length > limit:
+		file.close()
+		return PackedByteArray()
+	var bytes := file.get_buffer(length)
+	file.close()
+	return bytes if bytes.size() == length else PackedByteArray()
+
 func _fault(point: String) -> void:
 	fault_reached.emit(point)
 	if OS.is_debug_build() and fault_point == point and (fault_record_type < 0 or fault_record_type == current_record_type):
@@ -20,7 +31,7 @@ func _fault(point: String) -> void:
 
 func write_new(path: String, bytes: PackedByteArray) -> DuelResult:
 	if FileAccess.file_exists(path):
-		return DuelResult.success() if FileAccess.get_file_as_bytes(path) == bytes else DuelResult.failure("HISTORY_FORK")
+		return DuelResult.success() if read_bounded(path, bytes.size()) == bytes else DuelResult.failure("HISTORY_FORK")
 	return _write(path, bytes, false)
 
 func _write(path: String, bytes: PackedByteArray, replace: bool) -> DuelResult:
@@ -38,13 +49,13 @@ func _write(path: String, bytes: PackedByteArray, replace: bool) -> DuelResult:
 	file.close()
 	if write_error != OK: return DuelResult.failure("STORE_WRITE_FAILED")
 	_fault("after_flush")
-	if FileAccess.get_file_as_bytes(path + ".tmp") != bytes: return DuelResult.failure("STORE_WRITE_FAILED", "read-back")
+	if read_bounded(path + ".tmp", bytes.size()) != bytes: return DuelResult.failure("STORE_WRITE_FAILED", "read-back")
 	# A/B files always retain the other generation if replacement is interrupted.
 	if replace and FileAccess.file_exists(path):
 		if DirAccess.remove_absolute(path) != OK: return DuelResult.failure("STORE_WRITE_FAILED", "remove generation")
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK: return DuelResult.failure("STORE_WRITE_FAILED", "rename")
 	_fault("after_rename")
-	return DuelResult.success() if FileAccess.get_file_as_bytes(path) == bytes else DuelResult.failure("STORE_WRITE_FAILED", "final read-back")
+	return DuelResult.success() if read_bounded(path, bytes.size()) == bytes else DuelResult.failure("STORE_WRITE_FAILED", "final read-back")
 
 func save_ab(path: String, value: Variant) -> DuelResult:
 	var old := load_ab(path)
@@ -63,7 +74,7 @@ func load_ab(path: String) -> DuelResult:
 	for suffix in [".a", ".b"]:
 		if not FileAccess.file_exists(path + suffix): continue
 		found = true
-		var bytes := FileAccess.get_file_as_bytes(path + suffix)
+		var bytes := read_bounded(path + suffix, 65568)
 		if bytes.size() < 33 or bytes.size() > 65568: continue
 		var body := bytes.slice(0, bytes.size() - 32)
 		if DuelIds.digest(body) != bytes.slice(bytes.size() - 32): continue

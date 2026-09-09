@@ -80,3 +80,7 @@ static func session_value(data: Dictionary) -> Dictionary:
 		"secret": inv.secret.hex_decode(), "endpoint": {"host": inv.host, "port": int(inv.port)},
 		"players": [data.host_id if not data.host_id.is_empty() else zero, data.guest_id if not data.guest_id.is_empty() else zero],
 		"old_boots": [data.host_boot if not data.host_boot.is_empty() else zero, data.guest_boot if not data.guest_boot.is_empty() else zero], "epoch_highwater": data.epoch}
+
+static func observation(value: Variant, epoch: int) -> bool:
+	if not value is Dictionary or not exact(value, ["old_epoch", "round", "own_boot", "peer_boot", "cause", "start_mono_us", "start_utc_ms", "remaining_ceiling_ms", "terminal"]): return false
+	return integer(value.old_epoch, 1, 0xffffffff) and value.old_epoch == epoch and integer(value.round, 0, 0xffffffff) and bytes(value.own_boot, 16) and bytes(value.peer_boot, 16) and integer(value.cause, 0, 2) and integer(value.start_mono_us) and integer(value.start_utc_ms) and integer(value.remaining_ceiling_ms, 0, 60000) and value.terminal is bool

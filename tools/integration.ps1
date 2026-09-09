@@ -2,7 +2,7 @@
 param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','Checkpoint','Entities','All')][string]$Suite='Smoke',[int]$Seed=20260906,[string]$Case='All',[ValidateSet('Host','Guest','Both')][string]$Role='Both',[string]$Executable='')
 $ErrorActionPreference = 'Stop'
 if ($Suite -eq 'All') {
-    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','NetworkFaults')) {
+    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','NetworkFaults','Checkpoint','Entities')) {
         & $PSCommandPath -Suite $case -Seed $Seed -Executable $Executable
     }
     return

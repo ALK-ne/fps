@@ -70,7 +70,7 @@ func load_match(match_id: PackedByteArray) -> DuelResult:
 				if _valid_ack(number, match_id) and (floor_seq == 0 or number < floor_seq): floor_seq = number
 		for filename in checkpoint_names:
 			if not filename.ends_with(".bin"): continue
-			var candidate := DuelCheckpoint.decode(FileAccess.get_file_as_bytes(root + "/checkpoints/" + filename), match_id)
+			var candidate := DuelCheckpoint.decode(AtomicFiles.read_bounded(root + "/checkpoints/" + filename, 16384), match_id)
 			if candidate.error_code == "LEGACY_SCHEMA": legacy = true
 			if candidate.ok:
 				state = candidate.value
@@ -83,7 +83,7 @@ func load_match(match_id: PackedByteArray) -> DuelResult:
 	for filename in names:
 		if not filename.ends_with(".bin"): continue
 		if int(filename.trim_suffix(".bin")) <= checkpoint_seq: continue
-		var bytes := FileAccess.get_file_as_bytes(root + "/records/" + filename)
+		var bytes := AtomicFiles.read_bounded(root + "/records/" + filename, 8192)
 		var version := decode_record(bytes)
 		if not version.ok: return version
 		if state.last_seq > 0 and (version.value.schema == 1) != legacy: return DuelResult.failure("LEGACY_SCHEMA")
@@ -120,7 +120,7 @@ func append_raw(bytes: PackedByteArray) -> DuelResult:
 		return DuelResult.success(state) if decoded.value.hash == hash_at(seq) else DuelResult.failure("HISTORY_FORK")
 	if seq <= state.last_seq:
 		var path := root + "/records/%016d.bin" % seq
-		return DuelResult.success(state) if FileAccess.get_file_as_bytes(path) == bytes else DuelResult.failure("HISTORY_FORK")
+		return DuelResult.success(state) if AtomicFiles.read_bounded(path, 8192) == bytes else DuelResult.failure("HISTORY_FORK")
 	var next := _validate_next(bytes)
 	if not next.ok: return next
 	files.current_record_type = decoded.value.event.type
@@ -143,8 +143,29 @@ func append_transaction(events: Array) -> DuelResult:
 func persist_observation(observation: Dictionary) -> DuelResult:
 	return files.save_ab(root + "/observations/%d.json" % observation.old_epoch, observation)
 
-func tombstone(reason: String, epoch: int, result_status: String = "unresolved") -> DuelResult:
-	return files.save_ab(root + "/terminal.json", {"match_id": state.match_id, "seq": state.last_seq, "hash": state.last_hash, "old_epoch": epoch, "reason": reason, "policy": GameConfig.RECOVERY_POLICY, "result": result_status, "winner": -1, "local_only": true})
+func prune_observations() -> DuelResult:
+	# Only a durable recovery receipt authorizes deleting resolved observations.
+	if state.last_recovery_epoch < 1: return DuelResult.success()
+	var directory := DirAccess.open(root + "/observations")
+	if directory == null: return DuelResult.success()
+	var resolved: Array[int] = []
+	var names: Dictionary = {}
+	for filename in directory.get_files():
+		if not filename.ends_with(".json.a") and not filename.ends_with(".json.b"): continue
+		var stem := filename.trim_suffix(".a").trim_suffix(".b").trim_suffix(".json")
+		if not stem.is_valid_int() or str(int(stem)) != stem or int(stem) < 1: continue
+		var old_epoch := int(stem)
+		if old_epoch > state.last_recovery_epoch: continue
+		if not names.has(old_epoch):
+			names[old_epoch] = []
+			resolved.append(old_epoch)
+		names[old_epoch].append(filename)
+	resolved.sort()
+	for index in maxi(0, resolved.size() - 2):
+		for filename in names[resolved[index]]:
+			if directory.is_link(filename): return DuelResult.failure("STORE_CORRUPT")
+			if directory.remove(filename) != OK: return DuelResult.failure("STORE_WRITE_FAILED")
+	return DuelResult.success()
 
 func _zero_hash() -> PackedByteArray:
 	var bytes := PackedByteArray()
@@ -156,7 +177,7 @@ func history_after(seq: int) -> DuelResult:
 	for number in range(seq + 1, state.last_seq + 1):
 		var path := root + "/records/%016d.bin" % number
 		if not FileAccess.file_exists(path): return DuelResult.failure("CHECKPOINT_TOO_OLD")
-		history.append(FileAccess.get_file_as_bytes(path))
+		history.append(AtomicFiles.read_bounded(path, 8192))
 	return DuelResult.success(history)
 
 func hash_at(seq: int) -> PackedByteArray:
@@ -164,11 +185,11 @@ func hash_at(seq: int) -> PackedByteArray:
 	if seq == state.last_seq: return state.last_hash
 	var path := root + "/records/%016d.bin" % seq
 	if FileAccess.file_exists(path):
-		var record := decode_record(FileAccess.get_file_as_bytes(path))
+		var record := decode_record(AtomicFiles.read_bounded(path, 8192))
 		if record.ok: return record.value.hash
 	var cp := root + "/checkpoints/%016d.bin" % seq
 	if FileAccess.file_exists(cp):
-		var decoded := DuelCheckpoint.decode(FileAccess.get_file_as_bytes(cp), state.match_id)
+		var decoded := DuelCheckpoint.decode(AtomicFiles.read_bounded(cp, 16384), state.match_id)
 		if decoded.ok: return decoded.value.last_hash
 	return PackedByteArray()
 
@@ -182,7 +203,7 @@ func confirm_checkpoint(seq: int, hash_value: PackedByteArray) -> DuelResult:
 	if seq != state.last_seq or hash_value != state.last_hash: return DuelResult.failure("HISTORY_FORK")
 	var path := root + "/checkpoints/%016d.bin" % seq
 	if not FileAccess.file_exists(path): return DuelResult.failure("STORE_CORRUPT")
-	var checkpoint_bytes := FileAccess.get_file_as_bytes(path)
+	var checkpoint_bytes := AtomicFiles.read_bounded(path, 16384)
 	var ack := CanonicalCodec.encode({"schema": 2, "seq": seq, "hash": hash_value, "checkpoint_hash": DuelIds.digest(checkpoint_bytes)})
 	ack.append_array(DuelIds.digest(ack))
 	var saved := files.write_new(root + "/checkpoints/%016d.ack" % seq, ack)
@@ -213,7 +234,7 @@ func confirm_checkpoint(seq: int, hash_value: PackedByteArray) -> DuelResult:
 
 func _valid_ack(seq: int, match_id: PackedByteArray = PackedByteArray()) -> bool:
 	var prefix := root + "/checkpoints/%016d" % seq
-	var bytes := FileAccess.get_file_as_bytes(prefix + ".ack")
+	var bytes := AtomicFiles.read_bounded(prefix + ".ack", 1024)
 	if bytes.size() < 33 or bytes.size() > 1024: return false
 	var body := bytes.slice(0, bytes.size() - 32)
 	if DuelIds.digest(body) != bytes.slice(bytes.size() - 32): return false
@@ -221,6 +242,6 @@ func _valid_ack(seq: int, match_id: PackedByteArray = PackedByteArray()) -> bool
 	if not decoded.ok or not decoded.value is Dictionary or not StoreSchema.exact(decoded.value, ["schema", "seq", "hash", "checkpoint_hash"]): return false
 	var d: Dictionary = decoded.value
 	if d.schema != 2 or d.seq != seq or not StoreSchema.bytes(d.hash, 32) or not StoreSchema.bytes(d.checkpoint_hash, 32): return false
-	var checkpoint := FileAccess.get_file_as_bytes(prefix + ".bin")
+	var checkpoint := AtomicFiles.read_bounded(prefix + ".bin", 16384)
 	var decoded_checkpoint := DuelCheckpoint.decode(checkpoint, state.match_id if match_id.is_empty() else match_id)
 	return d.checkpoint_hash == DuelIds.digest(checkpoint) and decoded_checkpoint.ok and decoded_checkpoint.value.last_seq == seq and decoded_checkpoint.value.last_hash == d.hash

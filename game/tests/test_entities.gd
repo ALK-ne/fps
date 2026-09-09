@@ -55,3 +55,22 @@ func test_baseline_hash_and_retries(a: DuelAssertions) -> void:
 	requester.poll(1, 0, 100, 4000)
 	requester.poll(1, 0, 100, 6000)
 	a.truth(requester.failed, "finite failure after three sends")
+
+func test_delayed_baseline_preserves_newer_motion(a: DuelAssertions) -> void:
+	var sim := _sim()
+	sim.round_number = 1
+	var baseline: Dictionary = EntityWire.baseline(sim, 100, 1, 0).value
+	var replica := EntityReplica.new()
+	replica.reset(1)
+	var now := Time.get_ticks_msec()
+	var shot := EntityWire.tagged(1, {"shotId": 1, "weaponId": 10, "owner": 0, "recoilPitch": 0.0, "recoilYaw": 0.0, "projectiles": [_projectile()]})
+	replica.events({"round": 1, "firstEventSeq": 1, "serverTick": 101, "events": [shot]}, sim, now)
+	replica.correction({"round": 1, "tick": 105, "requiredEventSeq": 1, "entities": [{"kind": 1, "id": 1, "position": SnapshotCodec.vector(Vector3(0, 0, -5)), "velocity": SnapshotCodec.vector(Vector3(0, 0, -100))}]}, sim, now)
+	a.truth(replica.install(baseline, sim), "older baseline can replay known events")
+	a.equal(sim.weapons.projectiles[0].position, Vector3(0, 0, -5), "newer correction survives baseline replay")
+	a.equal(replica.notifications.size(), 1, "replayed shot does not repeat notification")
+	var next: Dictionary = EntityWire.baseline(sim, 110, 2, 1).value
+	replica.correction({"round": 1, "tick": 108, "requiredEventSeq": 3, "entities": [{"kind": 1, "id": 1, "position": SnapshotCodec.vector(Vector3(0, 0, -8)), "velocity": SnapshotCodec.vector(Vector3.ZERO)}]}, sim, now)
+	a.truth(replica.install(next, sim), "newer baseline installed")
+	a.equal(replica.corrections.size(), 0, "queued corrections older than baseline discarded")
+	a.equal(sim.weapons.projectiles[0].position, Vector3(0, 0, -5), "obsolete queued correction cannot rewind state")

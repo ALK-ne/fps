@@ -17,7 +17,7 @@ func _manifest() -> DuelResult:
 	return DuelResult.success(value)
 
 func _read(path: String) -> DuelResult:
-	var bytes := FileAccess.get_file_as_bytes(path)
+	var bytes := AtomicFiles.read_bounded(path, 1048576)
 	if bytes.size() < 33 or bytes.size() > 1048576: return DuelResult.failure("STORE_CORRUPT")
 	var body := bytes.slice(0, bytes.size() - 32)
 	if DuelIds.digest(body) != bytes.slice(bytes.size() - 32): return DuelResult.failure("STORE_CORRUPT")

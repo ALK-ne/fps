@@ -144,7 +144,7 @@ func maintain(sim: DuelSimulation, now: int) -> void:
 	for entry in corrections.duplicate():
 		var e: Dictionary = entry.entity
 		var key := _key(e.kind, e.id)
-		if tombstones.has(key) or entry.tick <= int(correction_ticks.get(key, -1)):
+		if tombstones.has(key) or entry.tick <= baseline_tick or entry.tick <= int(correction_ticks.get(key, -1)):
 			corrections.erase(entry)
 			continue
 		if now - entry.time >= 1000:
@@ -186,7 +186,13 @@ func visual_step(sim: DuelSimulation, tick: int) -> void:
 					remaining *= 1 - float(hit.fraction)
 
 func install(data: Dictionary, sim: DuelSimulation) -> bool:
-	if data.round != round_number or data.baselineId <= baseline_id: return false
+	if data.round != round_number or data.baselineId <= baseline_id or data.tick < baseline_tick: return false
+	var newer_motion: Dictionary = {}
+	for kind in [1, 2]:
+		for item in _list(sim, kind):
+			var key := _key(kind, item.id)
+			if int(correction_ticks.get(key, -1)) > data.tick:
+				newer_motion[key] = {"position": item.position, "velocity": item.velocity}
 	if data.cutEventSeq < sequence:
 		for seq in range(data.cutEventSeq + 1, sequence + 1):
 			if not history.has(seq):
@@ -209,4 +215,11 @@ func install(data: Dictionary, sim: DuelSimulation) -> bool:
 			pending.erase(seq)
 	request_reason = 0
 	_drain(sim)
+	# A reliable baseline can arrive after a newer unreliable correction.
+	# Preserve its advanced visual motion only for entities surviving the cut replay.
+	for kind in [1, 2]:
+		for item in _list(sim, kind):
+			var key := _key(kind, item.id)
+			if newer_motion.has(key): item.merge(newer_motion[key], true)
+	maintain(sim, Time.get_ticks_msec())
 	return true
