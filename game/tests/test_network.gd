@@ -11,6 +11,28 @@ func test_snapshot(a: DuelAssertions) -> void:
 	a.truth(r.ok, "snapshot decode")
 	a.equal(SnapshotCodec.encode(r.value), bytes, "snapshot roundtrip")
 
+func test_snapshot_rejects_invalid_state(a: DuelAssertions) -> void:
+	var p := PlayerState.new()
+	var q := PlayerState.new()
+	q.slot = 1
+	p.yaw = TAU * 20 + 0.5
+	var data := {"round": 1, "tick": 123, "players": [Replication.player_data(p), Replication.player_data(q)]}
+	var result := SnapshotCodec.decode(SnapshotCodec.encode(data))
+	a.truth(result.ok, "many full turns remain valid after wire normalization")
+	a.truth(absf(result.value.players[0].yaw - 0.5) < 0.00001, "normalized yaw preserves direction")
+	var invalid: Dictionary = MessageCodec.decode(11, SnapshotCodec.encode(data)).value
+	invalid.player0.inventory.reserveShotgun = 31
+	a.equal(SnapshotCodec.decode(MessageCodec.encode(11, invalid).value).error_code, "INVENTORY_CAP", "live decoder rejects excessive shotgun reserve")
+	invalid.player0.inventory.reserveShotgun = 0
+	invalid.player0.vaultStart.x = NAN
+	var bytes := SnapshotCodec.encode(data)
+	# player0 vaultStart follows header12 + player prefix66.
+	bytes.encode_u32(78, 0x7fc00000)
+	a.equal(SnapshotCodec.decode(bytes).error_code, "NON_FINITE", "live decoder rejects nonfinite vault metadata")
+	invalid = MessageCodec.decode(11, SnapshotCodec.encode(data)).value
+	invalid.player0.armorMax = 125000
+	a.equal(SnapshotCodec.decode(MessageCodec.encode(11, invalid).value).error_code, "INVALID_PLAYER", "armor tier must match round")
+
 func test_packet_authentication(a: DuelAssertions) -> void:
 	var sender := PacketCodec.new()
 	var receiver := PacketCodec.new()
@@ -22,6 +44,18 @@ func test_packet_authentication(a: DuelAssertions) -> void:
 	a.truth(not receiver.decode(packet, key, mid, 0, 1).ok, "replay rejected")
 	packet[48] ^= 1
 	a.truth(not PacketCodec.new().decode(packet, key, mid, 0, 1).ok, "tampering rejected")
+
+func test_snapshot_inventory_revision(a: DuelAssertions) -> void:
+	var player := PlayerState.new()
+	var old := Replication.player_data(player)
+	player.inventory.revision = 2
+	player.inventory.reserve[0] = 24
+	old.position = Vector3(1, 0, 0)
+	Replication.apply_player(player, old)
+	a.equal(player.inventory.reserve[0], 24, "old inventory snapshot cannot roll back later pickup")
+	a.equal(player.position, Vector3(1, 0, 0), "movement still updates independently")
+	Replication.apply_player(player, old, true)
+	a.equal(player.inventory.revision, 0, "explicit world baseline can replace old-round inventory")
 
 func test_fragments(a: DuelAssertions) -> void:
 	var sender := PacketCodec.new()

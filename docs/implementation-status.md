@@ -31,7 +31,9 @@ Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲー�
 - `MessagePolicy`: 全32typeのchannel/方向/auth段階/phaseを検査。構造decode後に入力値・在庫上限・player値等を検査する受信入口。保存blobのhash/reducer検査や全context条件は今後Session/Storeで接続する。
 - `ActionLedger`: pending16件、完了結果2048件とhighwater。処理中/完了後の重複は再実行せず、cache外はSTALE_ACTION、旧/将来roundはSTALE_ROUND。保持交換のaccepted/complete tickを分離。
 
-**R1は未完了**。以上は検証済みの部品であり、稼働中Sessionはまだ旧canonical/protocol1経路。protocol2/AD2の有効化、全送受信の置換、ActionResultとゲーム処理の接続、全type live検査が残る。旧経路を残した状態を完成扱いしない。R2–R6も未完了、配布ZIPは従来の0.1.0のまま。
+**R1は未完了**。2026-09-09の続行で、稼働中Sessionのtype11（278byte player snapshot）をMessageCodec＋意味検査へ接続した。byte形式は既存版と同一。その他の制御payloadは旧canonical、packet/invitationはprotocol1のまま。protocol2/AD2の有効化、残りの送受信の置換、ActionResultとゲーム処理の接続、全type live検査が残る。旧経路を残した状態を完成扱いしない。R2–R6も未完了、配布ZIPは従来の0.1.0のまま。
+
+type11移行と併せて、入力/host simulation/wireのyawを正規化、古いinventory revisionだけの巻き戻りを拒否。明示baselineの置換は別経路として維持。統合試験はFullMatch/NetworkFaultsで10勝・両者winner・最終HP/弾倉一致まで自動判定する。
 
 検証: `artifacts/tests/20260909-001737-184/result.json` でGodot40件・Node17件・設計6分類PASS。後続の台帳追加とUTF-8検査後、`artifacts/wire-foundation-20260909.log`で通信基盤7テスト・2988検査PASS。既存受入のPARTIALをこの基盤検証だけでPASSへ変更しない。
 
@@ -48,6 +50,12 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 ```
 
 ## 確認できた証拠
+
+- `artifacts/integration/20260909-113341-172/result.json`: yaw/在庫修正後のNetworkFaults成功。約100ms RTT・1%loss・重複/順序入替下で両者10–0、seq31・同hash・HP100000/0・弾倉10。最大poll間隔1148/1038ms、250ms超の処理区間記録なし。全障害行列・性能受入の代替ではない。
+
+- `artifacts/tests/20260909-113207-702/result.json`: snapshotの新codec接続、yaw正規化、在庫revision保護を含むGodot44件・Node17件・設計検証成功。A14の既存59tickを999msと記載していた点は983.333msへ訂正した（assertionの動作変更なし）。
+
+- `artifacts/integration/20260909-112952-098/result.json`: 新codecを通すsnapshotでFullMatch成功。両者10–0、seq31・同hash、HP100000/0、弾倉10。hostの最大physics区間847ms、最大poll間隔1315msを記録したため、性能受入の合格とはしない。このrunの後にyaw正規化・在庫revision修正を追加した。
 
 - `artifacts/integration/20260908-030446-069/result.json`: 拾得修正後のSmoke成功。両者Fighting・seq3・同hash、最大poll間隔102/97ms。
 
@@ -90,4 +98,4 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 次に進める内容
 
-残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `fa312fc`。拾得/交換の通信受入、reload/回復の全行列、entity同期と保存中断点検査が残る。D08の責任不明切断はユーザー回答待ちで、現時点では得点不変の停止・記録保持。
+残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `fa312fc`。拾得/交換の通信受入、reload/回復の全行列、entity同期と保存中断点検査が残る。D08は2026-09-09にabort-v1（勝者なし・得点不変で中断）を明示承認済み。ビルド定数/rules hash・保存・通信・UIへの反映と受入は残る。別家庭PC2台の試験は利用者が今後協力者を募って実施予定、A36–A38は外部待ち。

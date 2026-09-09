@@ -36,7 +36,7 @@ func test_swap_duration_release_and_cancel(a: DuelAssertions) -> void:
 	sim.pickup.step(sim.players, [_frame(true), InputFrame.new()], 0, 1)
 	a.equal(player.action, CanonicalCodec.Action.SWAP, "press starts full-inventory swap")
 	sim.pickup.step(sim.players, [_frame(), InputFrame.new()], 59, 1)
-	a.equal(player.inventory.active().id, 1, "999ms has no completed swap")
+	a.equal(player.inventory.active().id, 1, "59 ticks (983.333ms) has no completed swap")
 	var events := sim.pickup.step(sim.players, [_frame(true), InputFrame.new()], 60, 1)
 	a.equal(events.size(), 1, "1000ms commits once despite duplicate press")
 	a.equal(player.inventory.active().id, 910, "new gun equipped")

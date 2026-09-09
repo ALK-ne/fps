@@ -54,7 +54,7 @@ func step(frames: Array, current_tick: int) -> Array:
 		player.alive_at_start = player.hp_milli > 0
 		if not player.alive_at_start: continue
 		var frame: InputFrame = frames[player.slot]
-		player.yaw = frame.yaw
+		player.yaw = wrapf(frame.yaw, -PI, PI)
 		player.pitch = clampf(frame.pitch, deg_to_rad(-89), deg_to_rad(89))
 		player.last_input_seq = frame.seq
 		player.recoil = player.recoil.move_toward(Vector2.ZERO, deg_to_rad(6) / 60.0)

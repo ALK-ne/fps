@@ -9,7 +9,7 @@ static func player_data(player: PlayerState) -> Dictionary:
 		"grounded": m.grounded, "crouched": m.crouched, "sprinting": m.sprinting, "slide": m.slide_remaining_ticks,
 		"vault_start": m.vault_start, "vault_end": m.vault_end, "vault_progress": m.vault_progress_ticks, "vaulting": m.vaulting, "recoil": [player.recoil.x, player.recoil.y]}
 
-static func apply_player(player: PlayerState, d: Dictionary) -> void:
+static func apply_player(player: PlayerState, d: Dictionary, replace_inventory: bool = false) -> void:
 	player.position = d.position
 	player.velocity = d.velocity
 	player.yaw = d.yaw
@@ -17,7 +17,8 @@ static func apply_player(player: PlayerState, d: Dictionary) -> void:
 	player.hp_milli = d.hp
 	player.armor_milli = d.armor
 	player.armor_max = d.armor_max
-	player.inventory.apply_data(d.inventory)
+	if replace_inventory or int(d.inventory.revision) >= player.inventory.revision:
+		player.inventory.apply_data(d.inventory)
 	player.action = d.action
 	player.action_end_tick = d.action_end
 	player.action_kind = d.action_kind
@@ -39,7 +40,7 @@ static func world_data(sim: DuelSimulation, tick: int) -> Dictionary:
 
 static func apply_world(sim: DuelSimulation, data: Dictionary) -> void:
 	sim.round_number = data.round
-	for slot in 2: apply_player(sim.players[slot], data.players[slot])
+	for slot in 2: apply_player(sim.players[slot], data.players[slot], true)
 	sim.pickup.items = data.items
 	sim.weapons.projectiles = data.projectiles
 	sim.grenade.grenades = data.grenades

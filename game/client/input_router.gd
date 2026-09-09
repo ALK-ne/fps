@@ -49,7 +49,7 @@ func handle(event: InputEvent) -> void:
 		else:
 			var ads := Input.is_action_pressed("ads") or ads_toggle
 			var factor: float = settings.values.sensitivityDegreesPerPixel * (settings.values.adsSensitivityMultiplier if ads else 1.0)
-			yaw -= deg_to_rad(event.relative.x * factor)
+			yaw = wrapf(yaw - deg_to_rad(event.relative.x * factor), -PI, PI)
 			pitch = clampf(pitch - deg_to_rad(event.relative.y * factor), deg_to_rad(-89), deg_to_rad(89))
 	if event.is_echo(): return
 	for key in ["heal", "grenade"]:

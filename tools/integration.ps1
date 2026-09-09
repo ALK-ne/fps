@@ -105,6 +105,10 @@ try {
     $h = Read-Report $hostProfile
     $g = Read-Report $guestProfile
     if ($h.hash -ne $g.hash -or $h.seq -ne $g.seq -or ($h.scores -join ',') -ne ($g.scores -join ',')) { throw 'Peer durable states diverged' }
+    if ($Suite -in @('FullMatch','NetworkFaults')) {
+        if (!$h.terminal -or !$g.terminal -or ($h.scores -join ',') -ne '10,0' -or $h.winner -ne 0 -or $g.winner -ne 0) { throw 'Full match did not reach the expected ten-win result' }
+        if (($h.hp -join ',') -ne ($g.hp -join ',') -or $h.gun.magazine -ne $g.gun.magazine) { throw 'Final replicated combat state diverged' }
+    }
     if ($Suite -eq 'RecoveryRealtime' -and ($h.scores -join ',') -ne '0,1') { throw 'Wrong restart score' }
     if ($Suite -eq 'GuestRecoveryRealtime' -and ($h.scores -join ',') -ne '1,0') { throw 'Wrong restart score' }
     $errors = Get-ChildItem "$logs/*.stderr.log" | Where-Object { $_.Length -gt 0 }

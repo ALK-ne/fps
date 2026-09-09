@@ -17,7 +17,7 @@
 | A11 | PARTIAL | 同時死亡・timeout比較unit。完了同tick全組合せ未実施 |
 | A12 | PASS | test_melee: 素手/武器、同時近接の5m/s・damage0、射程/視野外、壁遮蔽/壁停止、sprint中射撃の16検査 |
 | A13 | PASS | 1000seed、chance0/1、銃と弾箱対応、全候補の実衝突余裕、次roundの装備/姿勢/弾/投擲reset |
-| A14 | PARTIAL | test_pickup_swapの実物理35検査: 999/1000ms、視線/解除中断、両round優先の銃/残量箱競合、drop弾倉保持・release制御、壁際8方向探索。通信下の操作受入は未実施 |
+| A14 | PARTIAL | test_pickup_swapの実物理35検査: 59/60tick（983.333/1000ms）、視線/解除中断、両round優先の銃/残量箱競合、drop弾倉保持・release制御、壁際8方向探索。厳密な999msと通信下の操作受入は未実施 |
 | A15 | PARTIAL | 弾薬上限・残量unit。reload追加試験と通信未全面検査 |
 | A16 | PARTIAL | 実装済み。全回復行列・通信受入未実施 |
 | A17 | NOT_RUN | 投擲ホイール・全取消入力未実施 |
@@ -31,7 +31,7 @@
 | A25 | PARTIAL | Godot期限境界と両役実65秒後の再開拒否・tombstone確認。全手順期限/反復再試行/再起動hostの終了通知表示は未全面検査 |
 | A26 | NOT_RUN | 全close/prepare/activate保存ACK点のkill未実施 |
 | A27 | PARTIAL | 2000 drawの保存整理・破損旧世代復元unit成功。時計急変/双方再起動の実プロセス試験未実施 |
-| A28 | PARTIAL | 責任不明停止・score保持、D08未承認。全fault注入未実施 |
+| A28 | PARTIAL | 責任不明停止・score保持。D08は2026-09-09にabort-v1を承認済み。採用後処理の反映・全fault注入未完 |
 | A29 | PARTIAL | 練習実行・描画、標的コード。全操作・TTK受入未実施 |
 | A30 | PARTIAL | 設定UI描画・保存コード・数値折返し修正。全保存/映像復帰/再割当未実施 |
 | A31 | PARTIAL | 日本語画像・生成音。2解像度/定位/全focus受入未実施 |
