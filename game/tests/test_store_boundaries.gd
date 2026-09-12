@@ -1,5 +1,21 @@
 extends RefCounted
 
+func test_checkpoint_record_threshold_without_round_growth(a: DuelAssertions) -> void:
+	var store := RecoveryStore.new()
+	store.state.round = 1
+	store.state.round_status = "CLOSED"
+	store.state.last_seq = 1023
+	a.truth(not store.checkpoint_due(), "below retained record threshold")
+	store.state.last_seq = 1024
+	a.truth(store.checkpoint_due(), "same round keep receipts trigger compaction")
+	store.checkpoint_seq = 1024
+	a.truth(not store.checkpoint_due(), "confirmed checkpoint resets threshold")
+	store.state.last_seq = 2048
+	store.state.round_status = "OPEN"
+	a.truth(not store.checkpoint_due(), "never checkpoint live combat")
+	store.state.round_status = "CLOSED"
+	a.truth(store.checkpoint_due(), "next thousand records trigger independently of round")
+
 func test_bounded_reads_and_ab_fallback(a: DuelAssertions) -> void:
 	var files := AtomicFiles.new()
 	var path := "user://tests/bounds_" + DuelIds.random_bytes(8).hex_encode()

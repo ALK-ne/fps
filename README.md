@@ -3,7 +3,7 @@
 Godot 4.7.2のゲーム本体を実装中。練習、実ENet対戦、10勝決着、両役の30秒再起動復帰をローカルで検証しています。全受入の完了ではありません。
 
 - [実装状況と残りの作業](docs/implementation-status.md)
-- [最新の実装・検証ログ（9月10日）](docs/implementation-progress-2026-09-10.md)
+- [最新の実装・検証ログ（9月12日）](docs/implementation-progress-2026-09-12.md)
 - [38項目の受入実行記録](docs/acceptance-run.md)
 - [起動・操作・接続方法](packaging/PLAY.md)
 

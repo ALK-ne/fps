@@ -15,6 +15,79 @@ func _sim() -> DuelSimulation:
 func _projectile() -> Dictionary:
 	return {"id": 1, "owner": 0, "kind": 1, "position": SnapshotCodec.vector(Vector3.ZERO), "velocity": SnapshotCodec.vector(Vector3(0, 0, -100)), "spawnTick": 100, "expiryTick": 220, "shotId": 1, "pelletIndex": 0}
 
+func test_event_batches_respect_bytes_and_count(a: DuelAssertions) -> void:
+	var events: Array = []
+	var cells: Array = []
+	for index in 81: cells.append(SnapshotCodec.vector(Vector3(index % 9, 0, index / 9)))
+	for id in range(1, 65): events.append(EntityWire.tagged(7, {"id": id, "owner": 0, "spawnTick": 100, "expiryTick": 400, "nextDamageTick": 115, "cells": cells}))
+	var split := EventJournal.batches(events)
+	a.truth(split.ok and split.value.size() > 1, "large events split below count limit")
+	var sequence := 1
+	for batch in split.value:
+		var encoded := MessageCodec.encode(22, {"round": 1, "firstEventSeq": sequence, "serverTick": 100, "events": batch})
+		a.truth(encoded.ok and encoded.value.size() <= 32768 and batch.size() <= 64, "actual encoded packet stays inside both limits")
+		a.equal(batch[0].payload.id, sequence, "split preserves event ordering")
+		sequence += batch.size()
+	a.equal(sequence, 65, "no events dropped during split")
+	events.clear()
+	for index in 65: events.append(EntityWire.tagged(8, {"slot": 0}))
+	split = EventJournal.batches(events)
+	a.equal([split.value[0].size(), split.value[1].size()], [64, 1], "small events split at count cap")
+
+func test_generation_limits_do_not_consume_inventory(a: DuelAssertions) -> void:
+	var sim := _sim()
+	var player: PlayerState = sim.players[0]
+	sim.weapons.config = sim.config
+	player.inventory.weapons[0] = {"id": 1, "kind": 1, "magazine": 24, "next_shot_us": 0}
+	player.inventory.active_slot = 0
+	var frame := InputFrame.new()
+	frame.actions = [{"kind": "fire"}]
+	sim.weapons.next_id = 8193
+	sim.weapons.fire(player, frame, 100)
+	a.equal(player.inventory.active().magazine, 24, "generation cap rejects shot before ammunition consumption")
+	a.equal(player.inventory.revision, 0, "rejected shot leaves inventory revision unchanged")
+	player.action = CanonicalCodec.Action.GRENADE_AIM
+	player.inventory.selected_grenade = 2
+	player.inventory.grenades = [0, 1]
+	sim.grenade.next_flame_id = 8193
+	a.truth(not sim.grenade.throw_from(player, 100).ok, "no throw when flame generation cap reached")
+	a.equal(player.inventory.grenades, [0, 1], "rejected throw preserves stock")
+	sim.grenade.next_flame_id = 1
+	for index in 7: sim.grenade.flames.append({"id": index + 1})
+	a.truth(sim.grenade.has_generation_capacity(2), "one remaining flame slot")
+	sim.grenade.grenades.append({"kind": 2})
+	a.truth(not sim.grenade.has_generation_capacity(2), "in-flight incendiary reserves the last flame slot")
+	a.truth(sim.grenade.has_generation_capacity(1), "flame cap does not prevent fragment grenade")
+	var replica := EntityReplica.new()
+	for id in range(1, 8193): replica._remember(1, id)
+	a.truth(replica._remember(1, 8192), "duplicate does not consume cumulative allowance")
+	a.truth(not replica._remember(1, 8193), "unbounded remote IDs rejected")
+	a.equal(replica.known_ids.size(), 8192, "remote ID table remains bounded")
+	replica.reset(2)
+	a.truth(replica._remember(1, 1), "new round resets ID namespace")
+
+func test_pellet_identity_and_correction_duplicates(a: DuelAssertions) -> void:
+	var pellets: Array = []
+	for index in 8:
+		var projectile := _projectile()
+		projectile.kind = 2
+		projectile.id = index + 1
+		projectile.pelletIndex = index
+		pellets.append(projectile)
+	var event := EntityWire.tagged(1, {"shotId": 1, "weaponId": 10, "owner": 0, "recoilPitch": 0.0, "recoilYaw": 0.0, "projectiles": pellets})
+	var message := {"round": 1, "firstEventSeq": 1, "serverTick": 100, "events": [event]}
+	a.truth(MessagePolicy.decoded(22, message).ok, "eight distinct shotgun pellets")
+	event.payload.projectiles[7].pelletIndex = 6
+	a.truth(not MessagePolicy.decoded(22, message).ok, "duplicated pellet index rejected")
+	event.payload.projectiles[7].pelletIndex = 0
+	event.payload.projectiles[7].kind = 1
+	a.truth(not MessagePolicy.decoded(22, message).ok, "mixed weapon kinds in one shot rejected")
+	var entity := {"kind": 1, "id": 1, "position": SnapshotCodec.vector(Vector3.ZERO), "velocity": SnapshotCodec.vector(Vector3.ZERO)}
+	var correction := {"round": 1, "tick": 102, "requiredEventSeq": 1, "entities": [entity, entity.duplicate(true)]}
+	a.truth(not MessagePolicy.decoded(12, correction).ok, "one correction per entity and tick")
+	correction.entities[1].kind = 2
+	a.truth(MessagePolicy.decoded(12, correction).ok, "separate entity namespaces allowed")
+
 func test_correction_before_spawn_and_tombstone(a: DuelAssertions) -> void:
 	var sim := _sim()
 	var r := EntityReplica.new()

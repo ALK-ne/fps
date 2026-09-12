@@ -53,3 +53,27 @@ static func decode(bytes: PackedByteArray, match_id: PackedByteArray) -> DuelRes
 	d.terminal_reason = REASONS[d.terminal_reason]
 	d.phase = CanonicalCodec.Phase.SUSPENDED
 	return DuelResult.success(MatchState.from_data(d))
+
+static func decode_legacy(bytes: PackedByteArray, match_id: PackedByteArray) -> DuelResult:
+	if bytes.size() < 33 or bytes.size() > 16384: return DuelResult.failure("STORE_CORRUPT")
+	var body := bytes.slice(0, bytes.size() - 32)
+	if DuelIds.digest(body) != bytes.slice(bytes.size() - 32): return DuelResult.failure("STORE_CORRUPT")
+	var decoded := CanonicalCodec.decode(body, 16384)
+	if not decoded.ok or not decoded.value is Dictionary or not StoreSchema.exact(decoded.value, ["schema", "state"]) or not StoreSchema.integer(decoded.value.schema, 1, 1) or not decoded.value.state is Dictionary: return DuelResult.failure("STORE_CORRUPT")
+	var d: Dictionary = decoded.value.state
+	var keys := ["match_id", "rule_hash", "players", "round", "prepared_round", "scores", "phase", "round_status", "previous_winner", "match_winner", "terminal_reason", "last_seq", "last_hash", "epoch_high_water", "last_recovery_epoch", "recovery_receipts"]
+	if not StoreSchema.exact(d, keys) or not StoreSchema.bytes(d.match_id, 16) or d.match_id != match_id or not StoreSchema.bytes(d.rule_hash, 32) or not StoreSchema.bytes(d.last_hash, 32) or not StoreSchema.legacy_players(d.players): return DuelResult.failure("STORE_CORRUPT")
+	for key in ["round", "last_seq", "epoch_high_water"]:
+		if not StoreSchema.integer(d[key], 1): return DuelResult.failure("STORE_CORRUPT")
+	if not StoreSchema.integer(d.prepared_round, 0, 0) or not StoreSchema.integer(d.last_recovery_epoch, 0, d.epoch_high_water) or not StoreSchema.integer(d.phase, 0, 11) or not d.round_status is String or d.round_status != "CLOSED": return DuelResult.failure("STORE_CORRUPT")
+	if not StoreSchema.integer(d.previous_winner, -1, 1) or not StoreSchema.integer(d.match_winner, -1, 1) or not d.terminal_reason is String or d.terminal_reason not in ["", "TEN_WINS", "DISCONNECT_TIMEOUT"]: return DuelResult.failure("STORE_CORRUPT")
+	if not d.scores is Array or d.scores.size() != 2: return DuelResult.failure("STORE_CORRUPT")
+	for score in d.scores:
+		if not StoreSchema.integer(score, 0, 10): return DuelResult.failure("STORE_CORRUPT")
+	if d.scores[0] + d.scores[1] > d.round or d.scores == [10, 10]: return DuelResult.failure("STORE_CORRUPT")
+	if (d.terminal_reason == "" and (d.match_winner != -1 or 10 in d.scores)) or (d.terminal_reason == "TEN_WINS" and (d.match_winner < 0 or d.scores[d.match_winner] != 10)) or (d.terminal_reason == "DISCONNECT_TIMEOUT" and d.match_winner < 0): return DuelResult.failure("STORE_CORRUPT")
+	if not d.recovery_receipts is Dictionary: return DuelResult.failure("STORE_CORRUPT")
+	for id in d.recovery_receipts:
+		if not id is String or id.length() != 32 or id != id.hex_decode().hex_encode() or not d.recovery_receipts[id] is bool or not d.recovery_receipts[id]: return DuelResult.failure("STORE_CORRUPT")
+	d.phase = CanonicalCodec.Phase.SUSPENDED
+	return DuelResult.success(MatchState.from_data(d))

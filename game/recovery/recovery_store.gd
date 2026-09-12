@@ -51,6 +51,7 @@ func decode_record(bytes: PackedByteArray) -> DuelResult:
 	if schema == 2:
 		if not StoreSchema.validate(kind, decoded.value): return DuelResult.failure("STORE_CORRUPT")
 		if kind == 5 and (decoded.value.base_seq != seq - 1 or decoded.value.base_hash != previous): return DuelResult.failure("HISTORY_FORK")
+	elif not StoreSchema.legacy_record(kind, decoded.value, mid, rules): return DuelResult.failure("STORE_CORRUPT")
 	return DuelResult.success({"schema": schema, "match_id": mid, "rules": rules, "seq": seq, "previous": previous, "event": StoreSchema.event(kind, decoded.value, mid, rules) if schema == 2 else MatchEvent.make(kind, decoded.value), "hash": bytes.slice(bytes.size() - 32)})
 
 func load_match(match_id: PackedByteArray) -> DuelResult:
@@ -59,6 +60,7 @@ func load_match(match_id: PackedByteArray) -> DuelResult:
 	checkpoint_seq = 0
 	floor_seq = 0
 	legacy = false
+	var saw_checkpoint := false
 	var checkpoints := DirAccess.open(root + "/checkpoints")
 	if checkpoints != null:
 		var checkpoint_names := checkpoints.get_files()
@@ -70,14 +72,18 @@ func load_match(match_id: PackedByteArray) -> DuelResult:
 				if _valid_ack(number, match_id) and (floor_seq == 0 or number < floor_seq): floor_seq = number
 		for filename in checkpoint_names:
 			if not filename.ends_with(".bin"): continue
-			var candidate := DuelCheckpoint.decode(AtomicFiles.read_bounded(root + "/checkpoints/" + filename, 16384), match_id)
-			if candidate.error_code == "LEGACY_SCHEMA": legacy = true
+			saw_checkpoint = true
+			var checkpoint_bytes := AtomicFiles.read_bounded(root + "/checkpoints/" + filename, 16384)
+			var candidate := DuelCheckpoint.decode(checkpoint_bytes, match_id)
+			var old_schema := candidate.error_code == "LEGACY_SCHEMA"
+			if old_schema: candidate = DuelCheckpoint.decode_legacy(checkpoint_bytes, match_id)
 			if candidate.ok:
+				legacy = old_schema
 				state = candidate.value
 				checkpoint_seq = state.last_seq
 				break
 	var directory := DirAccess.open(root + "/records")
-	if directory == null: return DuelResult.success(state)
+	if directory == null: return DuelResult.failure("STORE_CORRUPT") if saw_checkpoint and checkpoint_seq == 0 else DuelResult.success(state)
 	var names := directory.get_files()
 	names.sort()
 	for filename in names:
@@ -93,6 +99,7 @@ func load_match(match_id: PackedByteArray) -> DuelResult:
 		state = r.value
 		legacy = legacy or decode_record(bytes).value.schema == 1
 		records.append(bytes)
+	if saw_checkpoint and state.last_seq == 0: return DuelResult.failure("STORE_CORRUPT")
 	return DuelResult.success(state)
 
 func _validate_next(bytes: PackedByteArray) -> DuelResult:
@@ -198,6 +205,9 @@ func save_checkpoint(bytes: PackedByteArray) -> DuelResult:
 	if not decoded.ok: return decoded
 	if decoded.value.last_seq != state.last_seq or bytes != DuelCheckpoint.encode(state): return DuelResult.failure("HISTORY_FORK")
 	return files.write_new(root + "/checkpoints/%016d.bin" % state.last_seq, bytes)
+
+func checkpoint_due() -> bool:
+	return state.round > 0 and state.round_status == "CLOSED" and checkpoint_seq != state.last_seq and (state.round % 128 == 0 or state.last_seq - checkpoint_seq >= 1024)
 
 func confirm_checkpoint(seq: int, hash_value: PackedByteArray) -> DuelResult:
 	if seq != state.last_seq or hash_value != state.last_hash: return DuelResult.failure("HISTORY_FORK")

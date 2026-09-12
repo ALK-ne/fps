@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','Checkpoint','Entities','All')][string]$Suite='Smoke',[int]$Seed=20260906,[string]$Case='All',[ValidateSet('Host','Guest','Both')][string]$Role='Both',[string]$Executable='')
 $ErrorActionPreference = 'Stop'
+if ($Suite -eq 'Checkpoint' -and $Case -eq 'All') {
+    foreach ($checkpointCase in @('A27-rounds','A27-keeps')) { & $PSCommandPath -Suite Checkpoint -Case $checkpointCase -Seed $Seed -Executable $Executable }
+    return
+}
 if ($Suite -eq 'All') {
     foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','NetworkFaults','Checkpoint','Entities')) {
         & $PSCommandPath -Suite $case -Seed $Seed -Executable $Executable
@@ -143,13 +147,18 @@ try {
         }
     }
     if ($Suite -eq 'Checkpoint') {
-        Send-Control 'Host' @{command='fixture';case='checkpoint'} | Out-Null
-        Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.checkpoint_seq -eq 385 -and $g.checkpoint_seq -eq 385 -and $h.round -eq 129 -and $g.round -eq 129 -and $h.phase -eq 5 -and $g.phase -eq 5 } 120
+        if ($Case -notin @('A27-rounds','A27-keeps')) { throw 'Unknown checkpoint case' }
+        $fixtureName = if ($Case -eq 'A27-keeps') { 'checkpoint_keep' } else { 'checkpoint' }
+        $checkpointSeq = if ($Case -eq 'A27-keeps') { 1024 } else { 385 }
+        $nextRound = if ($Case -eq 'A27-keeps') { 2 } else { 129 }
+        Send-Control 'Host' @{command='fixture';case=$fixtureName} | Out-Null
+        Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.checkpoint_seq -eq $checkpointSeq -and $g.checkpoint_seq -eq $checkpointSeq -and $h.round -eq $nextRound -and $g.round -eq $nextRound -and $h.phase -eq 5 -and $g.phase -eq 5 } 300
         if (((Read-Report $hostProfile).scores -join ',') -ne '0,0') { throw 'Checkpoint fixture changed draw scores' }
     }
     if ($Suite -eq 'Inventory') {
-        if ($Case -notin @('All','A14-empty')) { throw 'This inventory case has not been implemented' }
+        if ($Case -notin @('All','A14-empty','A14-hold','A15-cap')) { throw 'This inventory case has not been implemented' }
         $roles = if ($Role -eq 'Both') { @('Host','Guest') } else { @($Role) }
+        if ($Case -in @('All','A14-empty')) {
         foreach ($actor in $roles) {
             $slot = if ($actor -eq 'Host') { 0 } else { 1 }
             $fixture = Send-Control 'Host' @{command='fixture';case='pickup_empty';slot=$slot}
@@ -166,6 +175,65 @@ try {
                 if ($after.inventories[1].revision -ne $before.inventories[1].revision -or $after.action_results_count -ne $before.action_results_count) { throw 'Duplicate request caused repeated inventory mutation' }
             }
             Send-Control $actor @{command='arm';tick=0;actions=@(@{action='interact';pressed=$false})} | Out-Null
+        }
+        }
+        if ($Case -in @('All','A14-hold')) {
+            foreach ($actor in $roles) {
+                $slot = if ($actor -eq 'Host') { 0 } else { 1 }
+                $fixture = Send-Control 'Host' @{command='fixture';case='pickup_hold';slot=$slot}
+                if (!$fixture.configured) { throw 'Hold fixture failed' }
+                Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and ($h.items.id -contains $fixture.id) -and ($g.items.id -contains $fixture.id) -and $g.inventories[$slot].weapons[0].id -eq ($fixture.id+1000) } 3
+                $before = Read-Report $hostProfile
+                Send-Control $actor @{command='arm';tick=0;actions=@(@{action='interact';pressed=$true})} | Out-Null
+                Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.inventories[$slot].weapons[0].id -eq $fixture.id -and $g.inventories[$slot].weapons[0].id -eq $fixture.id } 4
+                Start-Sleep -Milliseconds 300
+                $trace = Send-Control 'Host' @{command='trace'}
+                $trace | ConvertTo-Json -Depth 8 | Set-Content "$logs/hold-$actor-trace.json"
+                $start = @($trace.samples | Where-Object action -eq 6 | Select-Object -First 1)
+                if ($start.Count -ne 1) { throw 'Missing swap start tick' }
+                $endTick = $start[0].end_tick
+                if ($endTick -ne ($start[0].tick+60)) { throw 'Swap duration was not 60 simulation ticks' }
+                foreach ($offset in @(-1,0,1)) {
+                    $sample = @($trace.samples | Where-Object tick -eq ($endTick+$offset))
+                    if ($sample.Count -ne 1) { throw "Missing exact swap boundary $offset" }
+                    $expected = if ($offset -lt 0) { $fixture.id+1000 } else { $fixture.id }
+                    if ($sample[0].weapon -ne $expected) { throw "Incorrect weapon at swap boundary $offset" }
+                }
+                $after = Read-Report $hostProfile
+                $drop = @($after.items | Where-Object { $_.weapon.id -eq ($fixture.id+1000) })
+                if ($after.inventories[$slot].revision -ne ($before.inventories[$slot].revision+1) -or $drop.Count -ne 1 -or $drop[0].weapon.magazine -ne 11) { throw 'Swap duplicated or lost dropped magazine' }
+                if ($slot -eq 1) {
+                    Wait-State { (Read-Report $guestProfile).action_result.resultCode -eq 0 } 2
+                    for ($copy=0; $copy -lt 3; $copy++) { Send-Control 'Guest' @{command='resend_action'} | Out-Null }
+                    Start-Sleep -Milliseconds 700
+                    if ((Read-Report $hostProfile).inventories[$slot].revision -ne $after.inventories[$slot].revision) { throw 'Duplicate swap request caused a second exchange' }
+                }
+                Send-Control $actor @{command='arm';tick=0;actions=@(@{action='interact';pressed=$false})} | Out-Null
+            }
+        }
+        if ($Case -in @('All','A15-cap')) {
+            foreach ($actor in $roles) {
+                $slot = if ($actor -eq 'Host') { 0 } else { 1 }
+                foreach ($weaponKind in 1..3) {
+                    $cap = @(120,30,60)[$weaponKind-1]
+                    $fixture = Send-Control 'Host' @{command='fixture';case='ammo_cap';slot=$slot;weaponKind=$weaponKind}
+                    if (!$fixture.configured) { throw 'Ammo fixture failed' }
+                    Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and ($h.items.id -contains $fixture.id) -and ($g.items.id -contains $fixture.id) -and $g.inventories[$slot].reserve[$weaponKind-1] -eq ($cap-1) } 3
+                    $before = Read-Report $hostProfile
+                    Send-Control $actor @{command='arm';tick=0;actions=@(@{action='interact';pressed=$true})} | Out-Null
+                    Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.inventories[$slot].reserve[$weaponKind-1] -eq $cap -and $g.inventories[$slot].reserve[$weaponKind-1] -eq $cap -and @($h.items | Where-Object id -eq $fixture.id)[0].amount -eq 1 -and @($g.items | Where-Object id -eq $fixture.id)[0].amount -eq 1 } 3
+                    $after = Read-Report $hostProfile
+                    if ($after.inventories[$slot].revision -ne ($before.inventories[$slot].revision+1)) { throw 'Cap pickup must change inventory once' }
+                    if ($slot -eq 1) {
+                        Wait-State { (Read-Report $guestProfile).action_result.resultCode -eq 0 } 2
+                        for ($copy=0; $copy -lt 3; $copy++) { Send-Control 'Guest' @{command='resend_action'} | Out-Null }
+                        Start-Sleep -Milliseconds 700
+                        $duplicate = Read-Report $hostProfile
+                        if ($duplicate.inventories[$slot].revision -ne $after.inventories[$slot].revision -or $duplicate.inventories[$slot].reserve[$weaponKind-1] -ne $cap) { throw 'Duplicate cap pickup mutated inventory' }
+                    }
+                    Send-Control $actor @{command='arm';tick=0;actions=@(@{action='interact';pressed=$false})} | Out-Null
+                }
+            }
         }
     }
     if ($Suite -eq 'SaveFaults') {

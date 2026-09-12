@@ -23,6 +23,9 @@ static func mac(key: PackedByteArray, bytes: PackedByteArray) -> PackedByteArray
 func encode(kind: int, payload: PackedByteArray, match_id: PackedByteArray, epoch: int, slot: int, channel: int, key: PackedByteArray) -> Array:
 	var packets: Array = []
 	if payload.size() > 32768 or match_id.size() != 16 or key.size() != 32 or channel < 0 or channel > 3: return packets
+	if epoch < 0 or epoch > 0xffffffff or slot not in [0, 1]: return packets
+	var packet_count := 1 if payload.size() <= 1120 else int(ceil(payload.size() / 1104.0))
+	if outgoing[channel] > 0x7fffffffffffffff - packet_count or next_message >= 0x7fffffffffffffff: return packets
 	if payload.size() <= 1120: packets.append(_packet(kind, payload, match_id, epoch, slot, channel, key, 0))
 	else:
 		var count := int(ceil(payload.size() / 1104.0))
@@ -89,7 +92,7 @@ func _assemble(kind: int, payload: PackedByteArray) -> DuelResult:
 	var index := payload.decode_u16(8)
 	var count := payload.decode_u16(10)
 	var size := payload.decode_u32(12)
-	if size > 32768 or size <= 1120 or count != int(ceil(size / 1104.0)) or index >= count: return DuelResult.failure("INVALID_FRAGMENT")
+	if id < 1 or size > 32768 or size <= 1120 or count != int(ceil(size / 1104.0)) or index >= count: return DuelResult.failure("INVALID_FRAGMENT")
 	if not fragments.has(id):
 		if fragments.size() >= 4: return DuelResult.failure("FRAGMENT_LIMIT")
 		fragments[id] = {"created": now, "kind": kind, "count": count, "size": size, "parts": {}}
@@ -99,6 +102,9 @@ func _assemble(kind: int, payload: PackedByteArray) -> DuelResult:
 		return DuelResult.failure("INVALID_FRAGMENT")
 	var expected := mini(1104, size - index * 1104)
 	if payload.size() - 16 != expected: return DuelResult.failure("INVALID_FRAGMENT")
+	if f.parts.has(index) and f.parts[index] != payload.slice(16):
+		fragments.erase(id)
+		return DuelResult.failure("INVALID_FRAGMENT")
 	f.parts[index] = payload.slice(16)
 	if f.parts.size() != count: return DuelResult.failure("FRAGMENT_PENDING")
 	var bytes := PackedByteArray()

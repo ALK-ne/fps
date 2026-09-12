@@ -7,6 +7,24 @@ var revisions: Array = [-1, -1]
 var pickups: Dictionary = {}
 var event_types: Dictionary = {}
 
+static func batches(events: Array) -> DuelResult:
+	var result: Array = []
+	var batch: Array = []
+	var bytes := 22 # round, firstEventSeq, serverTick, count
+	for event in events:
+		var encoded := MessageCodec.encode(event.type, event.payload, true)
+		if not encoded.ok: return encoded
+		var size: int = encoded.value.size() + 3 # type and payload length
+		if size + 22 > 32768: return DuelResult.failure("PAYLOAD_LIMIT")
+		if batch.size() >= 64 or bytes + size > 32768:
+			result.append(batch)
+			batch = []
+			bytes = 22
+		batch.append(event)
+		bytes += size
+	if not batch.is_empty(): result.append(batch)
+	return DuelResult.success(result)
+
 func reset(number: int) -> void:
 	round_number = number
 	sequence = 0

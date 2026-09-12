@@ -19,7 +19,7 @@ func fire(player: PlayerState, frame: InputFrame, tick: int) -> void:
 	if player.action != CanonicalCodec.Action.IDLE or gun.magazine < 1: return
 	var now := tick * 1000000 / 60
 	if now < int(gun.next_shot_us): return
-	if projectiles.size() + int(definition.pellets) > 128: return
+	if projectiles.size() + int(definition.pellets) > 128 or next_id + int(definition.pellets) - 1 > 8192: return
 	var old_next: int = gun.next_shot_us
 	gun.next_shot_us = old_next + int(definition.intervalUs) if now - old_next < 16667 else now + int(definition.intervalUs)
 	gun.magazine -= 1

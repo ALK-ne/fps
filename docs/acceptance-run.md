@@ -1,6 +1,6 @@
 # 受入実行記録
 
-2026-09-08。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
+2026-09-12。最新の個別ケースと配布証拠は[継続ログ](implementation-progress-2026-09-12.md)を参照。以下の項目単位の判定は保守的に維持する。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
 
 | ID | 状態 | 証拠・不足 |
 | --- | --- | --- |

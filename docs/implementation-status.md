@@ -1,8 +1,8 @@
 # 実装状況
 
-更新: 2026-09-10。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+更新: 2026-09-12。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
 
-最新の実装・検証経過は[継続ログ](implementation-progress-2026-09-10.md)を参照。旧表の未完了項目は全受入確認後に更新する。
+最新の実装・検証経過は[継続ログ](implementation-progress-2026-09-12.md)を参照。旧表の未完了項目は全受入確認後に更新する。
 
 Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲーム本体を追加した。実装仕様の全38受入を完了したという意味ではない。
 
@@ -100,4 +100,4 @@ pwsh -NoProfile -File tools/package.ps1 -Version 0.1.0
 
 ## 次に進める内容
 
-残存する通信・保存・物理の未実装/未検査項目を順に埋める。配布ZIPは製品commit `fa312fc`。拾得/交換の通信受入、reload/回復の全行列、entity同期と保存中断点検査が残る。D08は2026-09-09にabort-v1（勝者なし・得点不変で中断）を明示承認済み。ビルド定数/rules hash・保存・通信・UIへの反映と受入は残る。別家庭PC2台の試験は利用者が今後協力者を募って実施予定、A36–A38は外部待ち。
+最新の残項目と証拠は[9月12日継続ログ](implementation-progress-2026-09-12.md)を参照。D08はabort-v1として承認・実装済み。0.2.0は配布検査済みで、追加変更の再出力を進めている。通信・保存障害の全行列と長時間性能測定は未完了。別家庭PC2台のA36–A38は利用者の協力者募集待ち。

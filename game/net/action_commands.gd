@@ -33,16 +33,19 @@ static func preflight(request: Dictionary, player: PlayerState, simulation: Duel
 			var copy := Inventory.new()
 			copy.apply_data(inv.to_data())
 			var result := copy.add_pickup(item.duplicate(true), simulation.config)
+			if result.error_code == "SWAP_REQUIRED" and simulation.pickup.generated_count >= 8192: return 8
 			return 0 if result.ok or result.error_code == "SWAP_REQUIRED" else 7
 		6: return 10 if tick < player.next_melee_tick else (0 if idle else 8)
 		7:
 			if gun.is_empty() or gun.magazine == 0: return 6
 			if simulation.weapons.projectiles.size() + int(simulation.config.weapon(gun.kind).pellets) > 128: return 8
+			if simulation.weapons.next_id + int(simulation.config.weapon(gun.kind).pellets) - 1 > 8192: return 8
 			if not idle and player.action != CanonicalCodec.Action.RELOAD: return 8
 			return 10 if tick * 1000000 / 60 < gun.next_shot_us else 0
 		8: return 0 if player.movement.grounded else 8
 		11:
 			if player.action != CanonicalCodec.Action.GRENADE_AIM: return 8
+			if not simulation.grenade.has_generation_capacity(inv.selected_grenade): return 8
 			return 0 if inv.grenades[inv.selected_grenade - 1] > 0 else 6
 	return 9
 

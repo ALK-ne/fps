@@ -17,6 +17,8 @@ var pending_bytes: int = 0
 var spawn_hashes: Dictionary = {}
 var sources: Dictionary = {}
 var event_types: Dictionary = {}
+var known_ids: Dictionary = {}
+var generated_counts: Array = [0, 0, 0, 0, 0]
 
 func reset(number: int) -> void:
 	round_number = number
@@ -35,6 +37,8 @@ func reset(number: int) -> void:
 	spawn_hashes.clear()
 	sources.clear()
 	event_types.clear()
+	known_ids.clear()
+	generated_counts = [0, 0, 0, 0, 0]
 
 func events(data: Dictionary, sim: DuelSimulation, now: int) -> void:
 	if data.round != round_number: return
@@ -78,7 +82,18 @@ func _list(sim: DuelSimulation, kind: int) -> Array:
 func _key(kind: int, id: int) -> String:
 	return "%d:%d" % [kind, id]
 
+func _remember(kind: int, id: int) -> bool:
+	var key := _key(kind, id)
+	if known_ids.has(key): return true
+	if generated_counts[kind] >= 8192:
+		conflict = true
+		return false
+	known_ids[key] = true
+	generated_counts[kind] += 1
+	return true
+
 func _spawn(sim: DuelSimulation, kind: int, data: Dictionary) -> void:
+	if not _remember(kind, data.id): return
 	var key := _key(kind, data.id)
 	if tombstones.has(key): return
 	var list := _list(sim, kind)
@@ -95,6 +110,7 @@ func _spawn(sim: DuelSimulation, kind: int, data: Dictionary) -> void:
 	if kind <= 3: sources[_key(kind, data.shotId if kind == 1 else data.id)] = data.owner
 
 func _remove(sim: DuelSimulation, kind: int, id: int) -> void:
+	if not _remember(kind, id): return
 	tombstones[_key(kind, id)] = sequence
 	var list := _list(sim, kind)
 	for i in range(list.size() - 1, -1, -1):
@@ -200,6 +216,9 @@ func install(data: Dictionary, sim: DuelSimulation) -> bool:
 				return false
 			pending[seq] = {"event": history[seq], "time": Time.get_ticks_msec()}
 	var old_snapshot := [Replication.player_data(sim.players[0]), Replication.player_data(sim.players[1])]
+	for pair in [["projectiles", 1], ["grenades", 2], ["flames", 3], ["pickups", 4]]:
+		for entity in data[pair[0]]:
+			if not _remember(pair[1], entity.id): return false
 	Replication.apply_world(sim, EntityWire.world(data))
 	# Inventory may already include a newer reliable event or snapshot.
 	for slot in 2:

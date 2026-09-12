@@ -140,7 +140,11 @@ func restore() -> DuelResult:
 	if not saved.ok: return saved
 	if not saved.value.value is Dictionary: return DuelResult.failure("STORE_CORRUPT")
 	var decoded_session := StoreSchema.session_data(saved.value.value, profile.player_id)
-	if not decoded_session.ok: return decoded_session
+	if not decoded_session.ok:
+		if decoded_session.error_code == "LEGACY_SCHEMA":
+			var old_history := store.load_match(mid)
+			if not old_history.ok: return old_history
+		return decoded_session
 	session_data = decoded_session.value
 	invitation_data = session_data.invitation
 	if invitation_data.match != mid.hex_encode(): return DuelResult.failure("HISTORY_FORK")
@@ -293,6 +297,7 @@ func _receive_payload(peer: ENetPacketPeer, kind: int, channel: int, slot: int, 
 		if OS.is_debug_build(): print(JSON.stringify({"payload_rejected": data.error_code, "kind": packet.kind, "bytes": packet.payload.size()}))
 		return
 	if not info.auth:
+		received_types[packet.kind] = int(received_types.get(packet.kind, 0)) + 1
 		_handshake(peer, packet.kind, data.value, packet.epoch)
 		return
 	if peer != active_peer or packet.slot != 1 - local_slot: return
@@ -309,6 +314,9 @@ func _handshake(peer: ENetPacketPeer, kind: int, d: Dictionary, packet_epoch: in
 	if host and kind == 1 and info.stage == 0:
 		if not _bytes(d, "player", 16) or not _bytes(d, "boot", 16) or not _bytes(d, "nonce", 32) or d.get("rules") != config.rules_hash or d.get("map") != config.map_hash: return
 		if not session_data.guest_id.is_empty() and d.player != session_data.guest_id: return
+		if maxi(epoch, int(session_data.epoch)) >= 0xffffffff:
+			_stop_conflict("EPOCH_EXHAUSTED")
+			return
 		epoch = maxi(epoch, int(session_data.epoch)) + 1
 		session_data.epoch = epoch
 		if not _save_session().ok:
@@ -389,8 +397,12 @@ func _send_to(peer: ENetPacketPeer, kind: int, data: Dictionary, channel: int, r
 			push_error("Control encode %d: %s" % [kind, encoded.error_code])
 			return
 		payload = encoded.value
+	var packets: Array = info.codec.encode(kind, payload, str(invitation_data.match).hex_decode(), epoch if forced_epoch < 0 else forced_epoch, local_slot, channel, info.key)
+	if packets.is_empty():
+		_stop_conflict("PACKET_ENCODING_LIMIT")
+		return
 	sent_types[kind] = int(sent_types.get(kind, 0)) + 1
-	for bytes in info.codec.encode(kind, payload, str(invitation_data.match).hex_decode(), epoch if forced_epoch < 0 else forced_epoch, local_slot, channel, info.key):
+	for bytes in packets:
 		var result := transport.send(peer, channel, bytes, reliable)
 		if result.ok: sent_bytes += bytes.size()
 
@@ -677,7 +689,7 @@ func _after_ack(next: String) -> void:
 				phase = CanonicalCodec.Phase.MATCH_RESULT
 				phase_changed.emit()
 				return
-			if store.state.round > 0 and store.state.round % 128 == 0 and store.checkpoint_seq != store.state.last_seq:
+			if store.checkpoint_due():
 				var bytes := DuelCheckpoint.encode(store.state)
 				var saved := store.save_checkpoint(bytes)
 				if not saved.ok:
@@ -818,9 +830,11 @@ func physics(frame: InputFrame) -> void:
 		game_events.emit(events)
 		var wire_events := journal.collect(world.simulation, events)
 		world.simulation.pickup.items = world.simulation.pickup.items.filter(func(item): return item.amount > 0)
-		while not wire_events.is_empty():
-			var batch := wire_events.slice(0, 64)
-			wire_events = wire_events.slice(batch.size())
+		var batches := EventJournal.batches(wire_events)
+		if not batches.ok or journal.sequence > 0x7fffffffffffffff - wire_events.size():
+			_stop_conflict("EVENT_ENCODING_LIMIT")
+			return
+		for batch in batches.value:
 			_send(22, {"round": store.state.round, "firstEventSeq": journal.sequence + 1, "serverTick": tick, "events": batch}, 3)
 			journal.sequence += batch.size()
 		if tick % 3 == 0:

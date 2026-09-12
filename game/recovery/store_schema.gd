@@ -84,3 +84,18 @@ static func session_value(data: Dictionary) -> Dictionary:
 static func observation(value: Variant, epoch: int) -> bool:
 	if not value is Dictionary or not exact(value, ["old_epoch", "round", "own_boot", "peer_boot", "cause", "start_mono_us", "start_utc_ms", "remaining_ceiling_ms", "terminal"]): return false
 	return integer(value.old_epoch, 1, 0xffffffff) and value.old_epoch == epoch and integer(value.round, 0, 0xffffffff) and bytes(value.own_boot, 16) and bytes(value.peer_boot, 16) and integer(value.cause, 0, 2) and integer(value.start_mono_us) and integer(value.start_utc_ms) and integer(value.remaining_ceiling_ms, 0, 60000) and value.terminal is bool
+
+static func legacy_players(value: Variant) -> bool:
+	if not value is Array or value.size() != 2: return false
+	for slot in 2:
+		if not value[slot] is Dictionary or not exact(value[slot], ["id", "slot"]) or not bytes(value[slot].id, 16) or not integer(value[slot].slot, slot, slot): return false
+	return value[0].id != value[1].id
+
+static func legacy_record(kind: int, p: Dictionary, mid: PackedByteArray, rules: PackedByteArray) -> bool:
+	# Validate the old layout before allowing its reducer to inspect any values.
+	match kind:
+		1: return exact(p, ["match_id", "rule_hash", "players", "epoch"]) and bytes(p.match_id, 16) and p.match_id == mid and bytes(p.rule_hash, 32) and p.rule_hash == rules and legacy_players(p.players) and integer(p.epoch, 1, 0xffffffff)
+		2, 3: return validate(kind, p)
+		4: return exact(p, ["round", "winner", "reason", "tick"]) and integer(p.round, 1, 0xffffffff) and integer(p.winner, -1, 1) and p.reason is String and p.reason == "combat" and integer(p.tick)
+		5: return exact(p, ["round", "old_epoch", "new_epoch", "recovery_id", "offender", "disposition"]) and integer(p.round, 0, 0xffffffff) and integer(p.old_epoch, 1, 0xffffffff) and integer(p.new_epoch, p.old_epoch + 1, 0xffffffff) and p.recovery_id is String and p.recovery_id.length() == 32 and p.recovery_id == p.recovery_id.hex_decode().hex_encode() and integer(p.offender, -1, 1) and integer(p.disposition, 0, 2)
+	return false

@@ -9,9 +9,16 @@ var next_id: int = 1
 var next_flame_id: int = 1
 var events: Array = []
 
+func has_generation_capacity(kind: int) -> bool:
+	if grenades.size() >= 4 or next_id > 8192: return false
+	if kind == 2:
+		var reserved := grenades.filter(func(g): return g.kind == 2).size()
+		if flames.size() + reserved >= 8 or next_flame_id + reserved > 8192: return false
+	return true
+
 func throw_from(player: PlayerState, tick: int) -> DuelResult:
 	var kind := player.inventory.selected_grenade
-	if player.movement.vaulting or player.action != CanonicalCodec.Action.GRENADE_AIM or player.inventory.grenades[kind - 1] < 1 or grenades.size() >= 4: return DuelResult.failure("ACTION_CONFLICT")
+	if player.movement.vaulting or player.action != CanonicalCodec.Action.GRENADE_AIM or player.inventory.grenades[kind - 1] < 1 or not has_generation_capacity(kind): return DuelResult.failure("ACTION_CONFLICT")
 	var speed: float = config.rules.grenades.frag.speed if kind == 1 else config.rules.grenades.incendiary.speed
 	var origin := player.eye() + player.direction() * 0.5
 	if not queries.ray(player.eye(), origin).is_empty(): origin = player.eye()

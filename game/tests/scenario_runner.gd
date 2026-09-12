@@ -14,6 +14,8 @@ var control_token := DuelIds.random_bytes(16).hex_encode()
 var last_command_tick: int = -1
 var fixture_id: int = 499
 var fixture_mode: String = ""
+var trace_slot: int = -1
+var tick_trace: Array = []
 
 func _ready() -> void:
 	if not OS.is_debug_build():
@@ -66,6 +68,8 @@ func _process(_delta: float) -> void:
 					response = {"armed": true}
 				elif request.get("command") == "fixture" and app.session.host:
 					response = _fixture(request)
+				elif request.get("command") == "trace":
+					response = {"samples": tick_trace.duplicate(true)}
 				elif request.get("command") == "resend_action" and not app.session.last_sent_action_request.is_empty():
 					app.session._send(20, app.session.last_sent_action_request, 3)
 					response = {"resent": true}
@@ -75,18 +79,22 @@ func _fixture(request: Dictionary) -> Dictionary:
 	var s := app.session
 	var sim := s.world.simulation
 	if s.phase != CanonicalCodec.Phase.FIGHTING: return {"error": "WRONG_PHASE"}
-	if request.get("case") == "checkpoint":
-		fixture_mode = "checkpoint"
+	if request.get("case") in ["checkpoint", "checkpoint_keep"]:
+		fixture_mode = request.case
 		s.phase = CanonicalCodec.Phase.RESOLVING
 		s.director.phase = s.phase
 		return {"configured": true}
 	if request.get("case") == "close_round":
 		sim.players[1].hp_milli = 0
 		return {"configured": true}
-	if request.get("case") not in ["pickup_empty", "frag", "incendiary"]: return {"error": "UNKNOWN_FIXTURE"}
+	if request.get("case") not in ["pickup_empty", "pickup_hold", "ammo_cap", "frag", "incendiary"]: return {"error": "UNKNOWN_FIXTURE"}
 	var slot := int(request.get("slot", 1))
 	if slot not in [0, 1]: return {"error": "INVALID_SLOT"}
+	var weapon_kind := int(request.get("weaponKind", 1))
+	if weapon_kind not in [1, 2, 3]: return {"error": "INVALID_WEAPON"}
 	fixture_id += 1
+	trace_slot = slot if request.case == "pickup_hold" else -1
+	tick_trace.clear()
 	for player in sim.players:
 		var revision := player.inventory.revision
 		player.reset(1)
@@ -96,6 +104,14 @@ func _fixture(request: Dictionary) -> Dictionary:
 		sim.queries.proxies[player.slot].position = player.position
 	sim.pickup.items = [{"id": fixture_id, "revision": 0, "kind": 1, "subtype": 1, "amount": 1, "position": sim.players[slot].eye() + Vector3.FORWARD * 0.8, "weapon": {"id": fixture_id, "kind": 1, "magazine": 7, "next_shot_us": 0}}]
 	sim.pickup.next_id = fixture_id + 1
+	if request.case == "pickup_hold":
+		sim.pickup.items[0].revision = 7
+		sim.players[slot].inventory.weapons = [{"id": fixture_id + 1000, "kind": 1, "magazine": 11, "next_shot_us": 0}, {"id": fixture_id + 2000, "kind": 3, "magazine": 5, "next_shot_us": 0}]
+		sim.players[slot].inventory.active_slot = 0
+	if request.case == "ammo_cap":
+		sim.players[slot].inventory.reserve[weapon_kind - 1] = int(s.config.weapon(weapon_kind).reserveCap) - 1
+		sim.pickup.items[0].merge({"kind": 2, "subtype": weapon_kind, "amount": 2}, true)
+		sim.pickup.items[0].erase("weapon")
 	if request.case in ["frag", "incendiary"]:
 		sim.pickup.items.clear()
 		var kind := 1 if request.case == "frag" else 2
@@ -110,6 +126,19 @@ func _physics_process(_delta: float) -> void:
 	if app == null: return
 	var s := app.session
 	if s == null: return
+	if trace_slot >= 0 and s.host:
+		var player: PlayerState = s.world.simulation.players[trace_slot]
+		tick_trace.append({"tick": s.tick, "action": player.action, "end_tick": player.action_end_tick, "revision": player.inventory.revision, "weapon": player.inventory.active().get("id", 0), "latched": player.interact_latched})
+		if tick_trace.size() > 256: tick_trace.pop_front()
+	if fixture_mode == "checkpoint_keep" and s.host and s.awaiting.is_empty():
+		var state := s.store.state
+		if state.round_status == "OPEN":
+			s._commit(MatchEvent.make(4, {"round": state.round, "winner": -1, "reason": 1, "closed_tick": s.tick}), "fixture")
+		elif state.round_status == "CLOSED":
+			var old_epoch := state.last_recovery_epoch + 1
+			var final_receipt := state.last_seq + 1 >= 1024
+			if final_receipt: fixture_mode = ""
+			s._commit(MatchEvent.make(5, {"round": state.round, "old_epoch": old_epoch, "new_epoch": old_epoch + 1, "recovery_id": DuelIds.recovery_id(state.match_id, old_epoch).hex_encode(), "offender": -1, "disposition": 1}), "prepare" if final_receipt else "fixture")
 	if fixture_mode == "checkpoint" and s.host and s.awaiting.is_empty():
 		var state := s.store.state
 		if state.round_status == "OPEN":
@@ -179,7 +208,7 @@ func _physics_process(_delta: float) -> void:
 		result.action_result = s.last_action_result
 		result.action_highwater = s.action_ledger.highwater
 		result.action_results_count = s.action_ledger.results.size()
-		result.items = s.world.simulation.pickup.items.map(func(item): return {"id": item.id, "amount": item.amount, "revision": item.revision})
+		result.items = s.world.simulation.pickup.items.map(func(item): return {"id": item.id, "amount": item.amount, "revision": item.revision, "weapon": item.get("weapon", {})})
 		result.event_sequence = s.journal.sequence if s.host else s.replica.sequence
 		result.last_command_tick = last_command_tick
 		latest_report = result.duplicate(true)

@@ -58,6 +58,12 @@ static func decoded(kind: int, data: Dictionary) -> DuelResult:
 					if data.argument not in [1, 2]: return DuelResult.failure("INVALID_INPUT")
 				_:
 					if data.argument != 0: return DuelResult.failure("INVALID_INPUT")
+		12:
+			var ids: Dictionary = {}
+			for entity in data.entities:
+				var key := "%d:%d" % [entity.kind, entity.id]
+				if entity.id < 1 or ids.has(key): return DuelResult.failure("INVALID_ENTITY")
+				ids[key] = true
 		11, 24:
 			if data.player0.slot != 0 or data.player1.slot != 1: return DuelResult.failure("INVALID_SLOT")
 			for player in [data.player0, data.player1]:
@@ -75,9 +81,11 @@ static func decoded(kind: int, data: Dictionary) -> DuelResult:
 				match int(event.type):
 					1:
 						var ids: Dictionary = {}
+						var pellets: Dictionary = {}
 						for projectile in p.projectiles:
-							if not _entity(1, projectile) or projectile.owner != p.owner or projectile.shotId != p.shotId or ids.has(projectile.id): return DuelResult.failure("INVALID_ENTITY")
+							if not _entity(1, projectile) or projectile.owner != p.owner or projectile.shotId != p.shotId or projectile.kind != p.projectiles[0].kind or ids.has(projectile.id) or pellets.has(projectile.pelletIndex): return DuelResult.failure("INVALID_ENTITY")
 							ids[projectile.id] = true
+							pellets[projectile.pelletIndex] = true
 						if p.projectiles.size() != (8 if p.projectiles[0].kind == 2 else 1): return DuelResult.failure("INVALID_ENTITY")
 					3:
 						if p.amountMilli <= 0: return DuelResult.failure("INVALID_DAMAGE")
@@ -114,6 +122,8 @@ static func _entity(kind: int, p: Dictionary) -> bool:
 	return true
 
 static func _tree(value: Variant, field: String = "") -> String:
+	if value is int and value < 0 and field not in ["axisX", "axisY", "argument", "activeSlot", "spawn0", "spawn1", "winner", "offender"]:
+		return "INTEGER_RANGE"
 	if value is Array:
 		for item in value:
 			var error := _tree(item, field)

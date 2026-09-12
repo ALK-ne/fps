@@ -1,5 +1,24 @@
 extends RefCounted
 
+func test_sequence_limits_and_conflicting_fragment(a: DuelAssertions) -> void:
+	var sender := PacketCodec.new()
+	var key := DuelIds.random_bytes(32)
+	var mid := DuelIds.random_bytes(16)
+	sender.outgoing[0] = 0x7fffffffffffffff
+	a.truth(sender.encode(5, PackedByteArray([1]), mid, 1, 0, 0, key).is_empty(), "packet sequence cannot wrap")
+	a.equal(sender.outgoing[0], 0x7fffffffffffffff, "exhausted sequence unchanged")
+	sender.outgoing[0] -= 1
+	var packet: PackedByteArray = sender.encode(5, PackedByteArray([1]), mid, 1, 0, 0, key)[0]
+	a.truth(PacketCodec.new().decode(packet, key, mid, 0, 1).ok, "last signed-positive sequence accepted")
+	var parts := sender.encode(24, DuelIds.random_bytes(2048), mid, 1, 0, 3, key)
+	var receiver := PacketCodec.new()
+	var fragment: PackedByteArray = parts[0].slice(48, parts[0].size() - 32)
+	a.equal(receiver._assemble(24, fragment).error_code, "FRAGMENT_PENDING", "first fragment retained")
+	fragment[16] ^= 1
+	a.equal(receiver._assemble(24, fragment).error_code, "INVALID_FRAGMENT", "same fragment index with changed bytes rejected")
+	a.equal(receiver.fragments.size(), 0, "conflicting assembly discarded")
+	a.equal(MessagePolicy.decoded(12, {"round": 1, "tick": -1, "requiredEventSeq": 0, "entities": []}).error_code, "INTEGER_RANGE", "u64 high-bit values cannot reach live simulation")
+
 func test_snapshot(a: DuelAssertions) -> void:
 	var p := PlayerState.new()
 	var q := PlayerState.new()

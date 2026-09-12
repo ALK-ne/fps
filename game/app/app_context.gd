@@ -258,7 +258,12 @@ func _trace_slow(section: String, started_us: int) -> void:
 		slow_sections[section] = maxi(int(slow_sections.get(section, 0)), milliseconds)
 
 func _error(result: DuelResult) -> void:
-	if is_instance_valid(ui.status_label): ui.status_label.text = result.error_code + " " + result.details
+	var message := result.error_code + " " + result.details
+	if result.error_code == "LEGACY_SCHEMA":
+		message = "旧版の記録です。新しい試合を開始してください。"
+		if session != null and session.store.legacy and session.store.state.last_seq > 0:
+			message += "\n検証済みの得点: %d–%d（読取専用）" % session.store.state.scores
+	if is_instance_valid(ui.status_label): ui.status_label.text = message
 	push_warning(result.error_code)
 
 func _close_session() -> void:
