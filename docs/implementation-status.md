@@ -1,8 +1,8 @@
 # 実装状況
 
-更新: 2026-09-12。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
+更新: 2026-09-13。実装中。`implementation_complete=false`、`two_home_verified=false`、`player_accepted=false`。
 
-最新の実装・検証経過は[継続ログ](implementation-progress-2026-09-12.md)を参照。旧表の未完了項目は全受入確認後に更新する。
+最新の実装・検証経過と0.2.1配布証拠は[継続ログ](implementation-progress-2026-09-13.md)を参照。項目の完了判定は全条件の確認後に更新する。
 
 Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲーム本体を追加した。実装仕様の全38受入を完了したという意味ではない。
 
@@ -11,13 +11,13 @@ Godot 4.7.2 Standardの公式ハッシュを照合して導入。game/にゲー�
 | 作業 | 状態 | 成果と残り |
 | --- | --- | --- |
 | W01 | 実装・一部検証済み | 固定版取得、プロジェクト、起動引数、プロファイルロック、テストランナー、Windows release export。debug/release exportの空profile起動検査成功 |
-| W02 | 実装・一部検証済み | 型、設定ハッシュ、reducer、選択、10勝、同時死亡、アーマー境界。wire payloadの全固定レイアウト一致は未完 |
+| W02 | 実装・一部検証済み | 型、設定ハッシュ、reducer、選択、10勝、同時死亡、アーマー境界。protocol2の全32type/9eventの固定wire形式と独立vector一致を実装・検証。全typeの実通信違反matrixは未完 |
 | W03 | 実装中 | append-only/A-B保存、read-back、履歴再生、復帰receipt。128ラウンド毎のcheckpointと双方ACK後の履歴整理、2000 draw・最新checkpoint破損からの復元成功。全保存中断点試験は未完 |
 | W04 | ローカル受入完了 | A07/A08: 実衝突形状の全合法spawn経路、射線、配置、移動速度/slide/天井/vaultと相手割込を確認 |
 | W05 | 実装・一部検証済み | 3銃、弾速、頭胴、反動、リロード、押し返し。実射撃で10勝完走。全命中境界の試験は未完 |
 | W06 | 実装・一部検証済み | 独立loot抽選、弾薬・所持上限、回復、長押し交換。全競合・キャンセルの通信試験は未完 |
 | W07 | 実装・未全面検証 | フラグ反射、爆風遮蔽、焼夷床探索、炎cell、投擲入力・軌道。全物理受入は未完 |
-| W08 | 実装中 | 実ENet、HMAC challenge、epoch、断片化、固定長snapshot、予測、確定履歴ACK、対戦・再戦。remoteの100ms補間/最大100ms外挿と1024件replay窓を追加。全message固定wire形式、悪意入力全検査、全entity同期検査は未完 |
+| W08 | 実装中 | 実ENet、HMAC challenge、epoch、断片化、固定長snapshot、予測、確定履歴ACK、対戦・再戦。remoteの100ms補間/最大100ms外挿と1024件replay窓を追加。全message固定wire形式を実経路へ接続。entityのSHA履歴/再演算容量・欠落復元を検証。悪意入力と全entity到着順matrixは未完 |
 | W09 | 実装・一部検証済み | 両役30秒再起動→第2ラウンド・正しい1点・履歴一致を実証。両役65秒超過も得点不変・再開拒否を実証。全phase/時計/保存ACK境界の試験は未完 |
 | W10 | 実装中 | メニュー、設定、練習標的、HUD、ホイール選択、生成WAV、日本語、focus解除。HUD配置・ホイール描画を画像確認し、画質を解像度倍率/MSAAへ適用。音・入力の全受入は未完 |
 | W11 | 実装中 | Windows ZIP、Install/Uninstall、利用者追加ファイル保持、release debug引数拒否。障害proxy実装・100ms/1%loss対戦完走。性能・遅延・全配布受入は未完 |

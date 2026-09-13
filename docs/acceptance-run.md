@@ -1,12 +1,12 @@
 # 受入実行記録
 
-2026-09-12。最新の個別ケースと配布証拠は[継続ログ](implementation-progress-2026-09-12.md)を参照。以下の項目単位の判定は保守的に維持する。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
+2026-09-13。最新の個別ケースと配布証拠は[継続ログ](implementation-progress-2026-09-13.md)を参照。以下の項目単位の判定は保守的に維持する。全条件を満たしていない項目はPASSにしない。PARTIALは一部のサブケースのみ実施、NOT_RUNは未実施。全仕様の正本はimplementation/07-acceptance.md。
 
 | ID | 状態 | 証拠・不足 |
 | --- | --- | --- |
 | A01 | PASS | 固定hash導入、headless import、debug/release export、各空profile起動成功 |
 | A02 | PASS | test_domain: armor、round、terminal、draw境界 |
-| A03 | PARTIAL | canonical破損/切断/int64、packet MAC、fragment、snapshot。全message固定形式未完 |
+| A03 | PARTIAL | 全32type/9eventの独立wire vector、全切断prefix、int64、MAC、fragment、snapshot。全typeの実通信正常/違反matrixは未完 |
 | A04 | PARTIAL | 実ファイルA/B破損・append再生。製品全kill点未実施 |
 | A05 | PARTIAL | 履歴hash/改ざん拒否、復帰照合。checkpoint保存/整理と旧世代復元unit成功。全kill点未実施 |
 | A06 | PARTIAL | reducer冪等性・terminal receipt、実再起動1点。全境界未実施 |

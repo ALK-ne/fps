@@ -20,10 +20,13 @@ if ($Suite -eq 'All') {
     return
 }
 if ($Suite -eq 'SaveFaults' -and ($Case -eq 'All' -or $Role -eq 'Both')) {
-    $boundaries = if ($Case -eq 'All') { @('before_write','partial_write','after_flush','after_rename') } else { @($Case) }
+    $boundaries = if ($Case -eq 'All') { @('before_write','partial_write','after_flush','after_rename','before_ack','after_ack') } else { @($Case) }
     $faultRoles = if ($Role -eq 'Both') { @('Host','Guest') } else { @($Role) }
     foreach ($boundary in $boundaries) {
-        foreach ($faultRole in $faultRoles) { & $PSCommandPath -Suite SaveFaults -Case $boundary -Role $faultRole -Seed $Seed -Executable $Executable }
+        foreach ($faultRole in $faultRoles) {
+            if ($boundary -in @('before_ack','after_ack') -and $faultRole -eq 'Host') { continue }
+            & $PSCommandPath -Suite SaveFaults -Case $boundary -Role $faultRole -Seed $Seed -Executable $Executable
+        }
     }
     return
 }
@@ -270,9 +273,12 @@ try {
         }
     }
     if ($Suite -eq 'SaveFaults') {
-        if ($Case -notin @('before_write','partial_write','after_flush','after_rename')) { throw 'Select an explicit persistence boundary for SaveFaults' }
+        if ($Case -notin @('before_write','partial_write','after_flush','after_rename','before_ack','after_ack')) { throw 'Select an explicit persistence boundary for SaveFaults' }
         if ($Role -eq 'Both') { throw 'Select Host or Guest for this fault run' }
-        Send-Control $Role @{command='fault';point=$Case;recordType=4;occurrence=1} | Out-Null
+        $ackBoundary=$Case -in @('before_ack','after_ack')
+        if ($ackBoundary -and $Role -ne 'Guest') { throw 'Durable record ACK send boundaries apply to Guest only' }
+        $recordType=if ($ackBoundary) { -1 } else { 4 }
+        Send-Control $Role @{command='fault';point=$Case;recordType=$recordType;occurrence=1} | Out-Null
         Send-Control 'Host' @{command='fixture';case='close_round'} | Out-Null
         $faultLog = Join-Path $logs ($Role.ToLowerInvariant() + '.stdout.log')
         Wait-State { (Read-SharedText $faultLog).Contains('"fault_point":"'+$Case+'"') } 5
