@@ -1,12 +1,20 @@
 [CmdletBinding()]
-param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','Checkpoint','Entities','All')][string]$Suite='Smoke',[int]$Seed=20260906,[string]$Case='All',[ValidateSet('Host','Guest','Both')][string]$Role='Both',[string]$Executable='')
+param([ValidateSet('Smoke','FullMatch','Rematch','NetworkFaults','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','Checkpoint','Entities','GracefulExpiry','All')][string]$Suite='Smoke',[int]$Seed=20260906,[string]$Case='All',[ValidateSet('Host','Guest','Both')][string]$Role='Both',[string]$Executable='')
 $ErrorActionPreference = 'Stop'
+if ($Suite -eq 'Entities' -and $Case -eq 'All') {
+    foreach ($entityCase in @('A17-frag','A19-incendiary','A21-gap')) { & $PSCommandPath -Suite Entities -Case $entityCase -Role $Role -Seed $Seed -Executable $Executable }
+    return
+}
+if ($Suite -eq 'GracefulExpiry' -and $Role -eq 'Both') {
+    foreach ($leavingRole in @('Host','Guest')) { & $PSCommandPath -Suite GracefulExpiry -Role $leavingRole -Seed $Seed -Executable $Executable }
+    return
+}
 if ($Suite -eq 'Checkpoint' -and $Case -eq 'All') {
     foreach ($checkpointCase in @('A27-rounds','A27-keeps')) { & $PSCommandPath -Suite Checkpoint -Case $checkpointCase -Seed $Seed -Executable $Executable }
     return
 }
 if ($Suite -eq 'All') {
-    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','NetworkFaults','Checkpoint','Entities')) {
+    foreach ($case in @('Smoke','FullMatch','Rematch','RecoveryRealtime','GuestRecoveryRealtime','ExpiryRealtime','GuestExpiryRealtime','BothRestart','NoPeerResume','Inventory','SaveFaults','NetworkFaults','Checkpoint','Entities','GracefulExpiry')) {
         & $PSCommandPath -Suite $case -Seed $Seed -Executable $Executable
     }
     return
@@ -117,9 +125,26 @@ try {
     $guestProcess = Start-Peer 'guest' $guestProfile 27837
     Wait-State { if ($guestProcess.HasExited) { throw "Guest startup exited: $logs" }; (Read-Report $guestProfile) -ne $null } 120
     Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h -and $g -and $h.phase -eq 5 -and $g.phase -eq 5 } 35
+    if ($Suite -eq 'GracefulExpiry') {
+        $actorProfile = if ($Role -eq 'Host') { $hostProfile } else { $guestProfile }
+        $survivorProfile = if ($Role -eq 'Host') { $guestProfile } else { $hostProfile }
+        $actorProcess = if ($Role -eq 'Host') { $hostProcess } else { $guestProcess }
+        $expectedWinner = if ($Role -eq 'Host') { 1 } else { 0 }
+        $leave = Send-Control $Role @{command='leave'}
+        if (!$leave.closed) { throw 'Graceful leave control failed' }
+        Wait-State { $peer=Read-Report $survivorProfile; [int]$peer.received_types.'41' -gt 0 -and $peer.phase -eq 7 } 5
+        Stop-Process -Id $actorProcess.Id -Force
+        Wait-State { $peer=Read-Report $survivorProfile; $peer.recovery_expired -and $peer.result_status -eq 1 -and $peer.result_winner -eq $expectedWinner } 70
+        $lockPort = if ($Role -eq 'Host') { 27836 } else { 27837 }
+        $restarted = Start-Peer ($Role.ToLowerInvariant()) $actorProfile $lockPort -Resume
+        Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h.result_status -eq 1 -and $g.result_status -eq 1 -and $h.notice_id -eq $g.notice_id -and $h.notice_id -ne '' } 25
+        $h=Read-Report $hostProfile
+        $g=Read-Report $guestProfile
+        if (!$h.terminal -or $h.winner -ne $expectedWinner -or $h.seq -ne ($g.seq+1) -or $h.notice_seq -ne $g.seq -or $h.notice_hash -ne $g.hash -or ($h.scores -join ',') -ne '0,0' -or ($g.scores -join ',') -ne '0,0') { throw 'Forfeit record/certificate prefix or score mismatch' }
+    }
     if ($Suite -eq 'Entities') {
-        if ($Case -notin @('All','A17-frag','A19-incendiary')) { throw 'Unknown entity case' }
-        $entityCases = if ($Case -eq 'All') { @('frag','incendiary') } elseif ($Case -eq 'A17-frag') { @('frag') } else { @('incendiary') }
+        if ($Case -notin @('All','A17-frag','A19-incendiary','A21-gap')) { throw 'Unknown entity case' }
+        $entityCases = if ($Case -eq 'All') { @('frag','incendiary') } elseif ($Case -in @('A17-frag','A21-gap')) { @('frag') } else { @('incendiary') }
         $actors = if ($Role -eq 'Both') { @('Host','Guest') } else { @($Role) }
         foreach ($entityCase in $entityCases) {
             foreach ($actor in $actors) {
@@ -134,8 +159,16 @@ try {
                 Wait-State { $h=Read-Report $hostProfile; $h.actions[$slot] -eq 4 } 2
                 Send-Control $actor @{command='arm';tick=0;actions=@(@{action='fire';pressed=$true})} | Out-Null
                 Wait-State { $h=Read-Report $hostProfile; $h.actions[$slot] -eq 5 } 2
+                if ($Case -eq 'A21-gap') {
+                    $drop = Send-Control 'Host' @{command='drop_type';type=22}
+                    if (!$drop.armed) { throw 'Event-loss hook unavailable' }
+                }
                 Send-Control $actor @{command='arm';tick=0;actions=@(@{action='fire';pressed=$false})} | Out-Null
-                Wait-State { $g=Read-Report $guestProfile; [int]$g.event_types.'6' -eq $bornBefore+1 } 2
+                if ($Case -eq 'A21-gap') {
+                    Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; [int]$g.sent_types.'26' -gt [int]$before.sent_types.'26' -and [int]$h.dropped_types.'22' -gt 0 -and $g.inventories[$slot].grenades[0] -eq 0 } 5
+                } else {
+                    Wait-State { $g=Read-Report $guestProfile; [int]$g.event_types.'6' -eq $bornBefore+1 } 2
+                }
                 $removals = if ($entityCase -eq 'frag') { 1 } else { 2 }
                 Wait-State { $g=Read-Report $guestProfile; [int]$g.event_types.'9' -ge $removedBefore+$removals -and $g.entity_ids.grenades.Count -eq 0 -and $g.entity_ids.flames.Count -eq 0 } 9
                 Wait-State { $h=Read-Report $hostProfile; $g=Read-Report $guestProfile; $h.event_sequence -eq $g.event_sequence -and $h.entity_ids.grenades.Count -eq 0 -and $h.entity_ids.flames.Count -eq 0 } 2
@@ -303,7 +336,7 @@ try {
     }
     $h = Read-Report $hostProfile
     $g = Read-Report $guestProfile
-    if ($h.hash -ne $g.hash -or $h.seq -ne $g.seq -or ($h.scores -join ',') -ne ($g.scores -join ',')) { throw 'Peer durable states diverged' }
+    if ($Suite -ne 'GracefulExpiry' -and ($h.hash -ne $g.hash -or $h.seq -ne $g.seq -or ($h.scores -join ',') -ne ($g.scores -join ','))) { throw 'Peer durable states diverged' }
     if ($Suite -in @('FullMatch','NetworkFaults')) {
         if (!$h.terminal -or !$g.terminal -or ($h.scores -join ',') -ne '10,0' -or $h.winner -ne 0 -or $g.winner -ne 0) { throw 'Full match did not reach the expected ten-win result' }
         if (($h.hp -join ',') -ne ($g.hp -join ',') -or $h.gun.magazine -ne $g.gun.magazine) { throw 'Final replicated combat state diverged' }

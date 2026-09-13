@@ -31,3 +31,15 @@
 - RTT/loss/seed/両役の長時間matrix、releaseの描画性能・遅延計測、画面と音の実観測。
 
 外部待ちはA36–A38（利用者が後日協力者を募る別家庭PC2台・本人評価）。D08は承認済みで、abort-v1は実装・検証済み。途中の各試験PASSを全受入PASSへ読み替えない。
+
+## 9月12日後半の追加
+
+- commit `f98e4c4` のWindows Acceptance exeで、当該時点の`-Suite All`全22 run PASS。集計は`artifacts/integration/all-f98e4c4.json`。範囲は18:48:43〜18:59:42、各result.jsonを参照。後述の新ケースはこの一括実行には含まない。
+- 自主退出の期限切れ: `GracefulExpiry` Host `20260912-190057-304` / Guest `20260912-190209-235` PASS。認証した41の受信、元60秒の期限、再起動、同一終了証明、host seq=guest seq+1、共通prefix hash、得点0–0を検査。
+- forfeit certificateは終了record追加直前の共通prefixを指す。証明を先にA/B保存し、hostのみRecoveryResolved(forfeit)を追記。証明保存後に中断してもrestoreで追記を完了する。guestは証明のみを保存し、host recordを代筆しない。host側は末尾recordのprevious hash/oldEpoch/offender/winnerを照合して同じ証明を検証する。証明の結果は後日の別interlockで書き換えない。
+- 生成eventをdebug hookで1回送信しない`Entities -Case A21-gap -Role Both`は`20260912-190333-175` PASS。26の送信とbaselineからの復元、在庫・sequence・消滅の収束を確認。UDP dropのENet再送とは独立した試験。
+- 既知eventの重複比較は最新1024件のSHA256へ変更。baseline再演算用payloadは別バッファで1024件/256KiB、範囲外baselineは状態を変更せず再要求。8検査PASS。
+- 1m未満でも壁を横切るcamera補正は即時補正とbaseline要求。0.8mの実物理壁試験3検査PASS。
+- Allに新しいGracefulExpiry/Entities gapを追加した。全規定受入matrixの完了を意味しない。
+
+残りは全type違反matrix、回復/リロード/競合取消の全通信時系列、時計異常・保存/ACKの残境界、観測/終了の固定保存フィールドの整備、長時間性能/遅延/画面/音の受入。forfeit照合とentity履歴上限は上記の実装・個別検証まで進んだ。

@@ -7,6 +7,8 @@ var baseline_id: int = 0
 var baseline_tick: int = -1
 var pending: Dictionary = {}
 var history: Dictionary = {}
+var replay_events: Dictionary = {}
+var replay_bytes: int = 0
 var tombstones: Dictionary = {}
 var corrections: Array = []
 var correction_ticks: Dictionary = {}
@@ -27,6 +29,8 @@ func reset(number: int) -> void:
 	baseline_tick = -1
 	pending.clear()
 	history.clear()
+	replay_events.clear()
+	replay_bytes = 0
 	tombstones.clear()
 	corrections.clear()
 	correction_ticks.clear()
@@ -46,7 +50,7 @@ func events(data: Dictionary, sim: DuelSimulation, now: int) -> void:
 		var seq: int = data.firstEventSeq + index
 		var event: Dictionary = data.events[index]
 		if seq <= sequence:
-			if history.has(seq) and history[seq] != event: conflict = true
+			if history.has(seq) and history[seq] != DuelIds.digest(CanonicalCodec.encode(event)): conflict = true
 			continue
 		if pending.has(seq) and pending[seq].event != event:
 			conflict = true
@@ -67,14 +71,22 @@ func _drain(sim: DuelSimulation) -> void:
 	while pending.has(sequence + 1):
 		sequence += 1
 		var event: Dictionary = pending[sequence].event
-		pending_bytes -= int(pending[sequence].get("size", 0))
+		var size := int(pending[sequence].get("size", 0))
+		pending_bytes -= size
 		pending.erase(sequence)
 		var previous_notifications := notifications.size()
 		if not history.has(sequence): event_types[event.type] = int(event_types.get(event.type, 0)) + 1
 		_apply(event, sim)
 		if history.has(sequence): notifications.resize(previous_notifications)
-		history[sequence] = event
-		if history.size() > 2048: history.erase(history.keys()[0])
+		history[sequence] = DuelIds.digest(CanonicalCodec.encode(event))
+		if history.size() > 1024: history.erase(history.keys()[0])
+		if not replay_events.has(sequence):
+			replay_events[sequence] = {"event": event, "size": size}
+			replay_bytes += size
+		while replay_events.size() > 1024 or replay_bytes > 262144:
+			var oldest: int = replay_events.keys()[0]
+			replay_bytes -= replay_events[oldest].size
+			replay_events.erase(oldest)
 
 func _list(sim: DuelSimulation, kind: int) -> Array:
 	return sim.weapons.projectiles if kind == 1 else (sim.grenade.grenades if kind == 2 else (sim.grenade.flames if kind == 3 else sim.pickup.items))
@@ -210,11 +222,18 @@ func install(data: Dictionary, sim: DuelSimulation) -> bool:
 			if int(correction_ticks.get(key, -1)) > data.tick:
 				newer_motion[key] = {"position": item.position, "velocity": item.velocity}
 	if data.cutEventSeq < sequence:
-		for seq in range(data.cutEventSeq + 1, sequence + 1):
-			if not history.has(seq):
+		if sequence - data.cutEventSeq > 1024:
+			request_reason = 1
+			return false
+		for offset in range(sequence - data.cutEventSeq):
+			var seq: int = data.cutEventSeq + 1 + offset
+			if not replay_events.has(seq):
 				request_reason = 1
 				return false
-			pending[seq] = {"event": history[seq], "time": Time.get_ticks_msec()}
+		# Validate the entire replay range before changing the pending queue.
+		for offset in range(sequence - data.cutEventSeq):
+			var seq: int = data.cutEventSeq + 1 + offset
+			pending[seq] = {"event": replay_events[seq].event, "time": Time.get_ticks_msec()}
 	var old_snapshot := [Replication.player_data(sim.players[0]), Replication.player_data(sim.players[1])]
 	for pair in [["projectiles", 1], ["grenades", 2], ["flames", 3], ["pickups", 4]]:
 		for entity in data[pair[0]]:
@@ -226,6 +245,10 @@ func install(data: Dictionary, sim: DuelSimulation) -> bool:
 	baseline_id = data.baselineId
 	baseline_tick = data.tick
 	sequence = data.cutEventSeq
+	for seq in replay_events.keys():
+		if seq <= sequence:
+			replay_bytes -= replay_events[seq].size
+			replay_events.erase(seq)
 	for key in tombstones.keys():
 		if tombstones[key] > sequence: tombstones.erase(key)
 	for seq in pending.keys():

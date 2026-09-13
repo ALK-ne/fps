@@ -7,7 +7,7 @@ Godot 4.7.2のゲーム本体を実装中。練習、実ENet対戦、10勝決着
 - [38項目の受入実行記録](docs/acceptance-run.md)
 - [起動・操作・接続方法](packaging/PLAY.md)
 
-開発起動は `tools/godot/4.7.2/Godot_v4.7.2-stable_win64.exe --path game`。エンジンの取得は `pwsh -File tools/bootstrap.ps1`。Windows配布物は `pwsh -File tools/package.ps1 -Version 0.2.0` で生成します。
+開発起動は `tools/godot/4.7.2/Godot_v4.7.2-stable_win64.exe --path game`。エンジンの取得は `pwsh -File tools/bootstrap.ps1`。Windows配布物は `pwsh -File tools/package.ps1 -Version 0.2.1` で生成します。
 
 実装は **[実装仕様v1.1](docs/implementation/README.md)** から開始する。ファイル/API、ルール、通信/復元、画面、配布、12作業単位、38受入項目を定義している。
 

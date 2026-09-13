@@ -1,5 +1,37 @@
 extends RefCounted
 
+func test_forfeit_certificate_prefix_and_host_record(a: DuelAssertions) -> void:
+	var host := RecoveryStore.new()
+	host.root = "user://tests/forfeit_" + DuelIds.random_bytes(8).hex_encode()
+	var mid := DuelIds.random_bytes(16)
+	var created := MatchEvent.make(1, {"match_id": mid, "rule_hash": DuelIds.random_bytes(32), "map_hash": DuelIds.random_bytes(32), "players": [{"id": DuelIds.random_bytes(16), "slot": 0}, {"id": DuelIds.random_bytes(16), "slot": 1}], "epoch": 1})
+	a.truth(host.append_transaction([created, MatchEvent.make(2, {"round": 1, "first_slot": 0}), MatchEvent.make(3, {"round": 1})]).ok, "common history durable")
+	var guest := RecoveryStore.new()
+	guest.root = host.root + "_guest"
+	for record in host.records: a.truth(guest.append_raw(record).ok, "guest has common prefix")
+	var notice := RecoveryStatus.create(host.state, 1, DuelIds.random_bytes(16), {}, "RECOVERY_EXPIRED", 0)
+	a.truth(guest.persist_terminal_notice(notice, false, 2).ok, "guest saves certificate only")
+	a.equal(guest.state.last_seq, 3, "guest cannot author host record")
+	# Simulate interruption after certificate persistence, before host record append.
+	a.truth(host.files.save_ab(host.root + "/terminal.json", {"policy": GameConfig.RECOVERY_POLICY, "status": notice}).ok, "proof durable before record")
+	a.truth(host.load_match(mid).ok, "restart from common prefix")
+	a.truth(host.persist_terminal_notice(notice, true, 2).ok, "host finishes forfeit after interruption")
+	a.equal(host.state.last_seq, 4, "one host-owned terminal record")
+	a.equal(host.state.terminal_reason, "DISCONNECT_TIMEOUT", "durable forfeit classification")
+	a.equal(host.state.match_winner, 1, "winner follows proven offender")
+	a.equal(host.state.scores, [0, 0], "forfeit changes match winner without new round point")
+	a.truth(host.validate_terminal_notice(notice) and guest.validate_terminal_notice(notice), "both accept the same prefix certificate")
+	a.truth(host.persist_terminal_notice(notice, true, 3).ok, "replayed notice idempotent")
+	a.equal(host.state.last_seq, 4, "no duplicate terminal record")
+	a.truth(host.load_match(mid).ok and host.validate_terminal_notice(notice), "record and certificate validate after reload")
+	var forged := notice.duplicate(true)
+	forged.winner = 0
+	forged.offender = 1
+	a.truth(not host.validate_terminal_notice(forged), "certificate cannot replace committed winner")
+	forged = notice.duplicate(true)
+	forged.hash = DuelIds.random_bytes(32)
+	a.truth(not host.validate_terminal_notice(forged), "certificate cannot reference a different prefix")
+
 func test_closed_index_idempotence_and_manifest_fallback(a: DuelAssertions) -> void:
 	var index := ClosedIndex.new()
 	index.root = "user://tests/closed_" + DuelIds.random_bytes(8).hex_encode()

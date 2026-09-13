@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidatePattern('^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+)?$')][string]$Version='0.2.0')
+param([ValidatePattern('^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+)?$')][string]$Version='0.2.1')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $godot = Join-Path $PSScriptRoot 'godot/4.7.2/Godot_v4.7.2-stable_win64_console.exe'

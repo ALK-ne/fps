@@ -14,6 +14,9 @@ static func notice_id(mid: PackedByteArray, old_epoch: int, result: int, observa
 
 static func create(state: MatchState, old_epoch: int, boot: PackedByteArray, observation: Dictionary, reason: String, offender: int) -> Dictionary:
 	var expired := reason in ["RECOVERY_EXPIRED", "RECOVERY_ACK_TIMEOUT"]
+	if state.terminal_reason == "DISCONNECT_TIMEOUT":
+		expired = true
+		offender = 1 - state.match_winner
 	var uncertain := reason == "CLOCK_UNCERTAIN"
 	var block := 1 if expired else (6 if uncertain else (4 if reason.begins_with("STORE") else 3))
 	var result := (1 if offender >= 0 else 2) if expired else 0

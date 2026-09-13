@@ -1,5 +1,36 @@
 extends RefCounted
 
+func test_small_correction_across_wall_snaps_camera(a: DuelAssertions) -> void:
+	var tree: SceneTree = Engine.get_main_loop()
+	var cfg := GameConfig.new()
+	cfg.load_data()
+	cfg.arena.obstacles = []
+	var view := WorldView.new()
+	tree.root.add_child(view)
+	view.build(cfg)
+	var wall := StaticBody3D.new()
+	wall.collision_layer = 1
+	wall.position = Vector3(-7.6, 1.5, -3)
+	var collision := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.02, 3, 2)
+	collision.shape = box
+	wall.add_child(collision)
+	view.add_child(wall)
+	var player := view.simulation.players[1]
+	player.position = Vector3(-8, 0.02, -3)
+	await tree.physics_frame
+	await tree.physics_frame
+	var authoritative := Replication.player_data(player)
+	authoritative.position += Vector3(0.8, 0, 0)
+	var prediction := Prediction.new()
+	prediction.reconcile(player, authoritative, view.simulation.movement)
+	a.equal(prediction.camera_offset, Vector3.ZERO, "wall-crossing correction snaps even below one metre")
+	a.truth(prediction.needs_baseline, "wall crossing requests authoritative baseline")
+	a.equal(prediction.offset_remaining, 0.0, "no camera blend through wall")
+	view.queue_free()
+	await tree.process_frame
+
 func test_camera_convergence_and_overflow(a: DuelAssertions) -> void:
 	var tree: SceneTree = Engine.get_main_loop()
 	var cfg := GameConfig.new()

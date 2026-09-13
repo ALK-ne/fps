@@ -59,6 +59,9 @@ func _process(_delta: float) -> void:
 				elif request.get("command") == "status":
 					app.session.check_status()
 					response = {"checking": true}
+				elif request.get("command") == "leave":
+					app.session.close()
+					response = {"closed": true}
 				elif request.get("command") == "fault":
 					var files := app.session.store.files
 					files.fault_point = str(request.get("point", ""))
@@ -70,6 +73,9 @@ func _process(_delta: float) -> void:
 					response = _fixture(request)
 				elif request.get("command") == "trace":
 					response = {"samples": tick_trace.duplicate(true)}
+				elif request.get("command") == "drop_type" and int(request.get("type", 0)) in [12, 21, 22, 24, 25, 26]:
+					app.session.debug_drop_types[int(request.type)] = 1
+					response = {"armed": true}
 				elif request.get("command") == "resend_action" and not app.session.last_sent_action_request.is_empty():
 					app.session._send(20, app.session.last_sent_action_request, 3)
 					response = {"resent": true}
@@ -200,6 +206,10 @@ func _physics_process(_delta: float) -> void:
 		result.map_hash = app.config.map_hash.hex_encode()
 		result.sent_types = s.sent_types
 		result.received_types = s.received_types
+		result.dropped_types = s.debug_dropped_types
+		result.notice_seq = s.terminal_status.get("seq", 0)
+		result.notice_hash = s.terminal_status.get("hash", PackedByteArray()).hex_encode()
+		result.result_winner = s.terminal_status.get("winner", -1)
 		result.checkpoint_seq = s.store.checkpoint_seq
 		result.event_types = s.journal.event_types if s.host else s.replica.event_types
 		result.actions = [s.world.simulation.players[0].action, s.world.simulation.players[1].action]

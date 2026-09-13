@@ -83,6 +83,8 @@ var phase_buffer: Array = []
 var phase_buffer_bytes: int = 0
 var sent_types: Dictionary = {}
 var received_types: Dictionary = {}
+var debug_drop_types: Dictionary = {}
+var debug_dropped_types: Dictionary = {}
 
 func setup(cfg: GameConfig, user: DuelProfile, game_clock: DuelClock, view: WorldView) -> void:
 	config = cfg
@@ -157,8 +159,11 @@ func restore() -> DuelResult:
 	if not history.ok: return history
 	if store.legacy: return DuelResult.failure("LEGACY_SCHEMA")
 	if terminal.ok:
-		if not terminal.value.value is Dictionary or not StoreSchema.exact(terminal.value.value, ["policy", "status"]) or terminal.value.value.policy != GameConfig.RECOVERY_POLICY or not terminal.value.value.status is Dictionary or not RecoveryStatus.validate(terminal.value.value.status, store.state): return DuelResult.failure("STORE_CORRUPT")
+		if not terminal.value.value is Dictionary or not StoreSchema.exact(terminal.value.value, ["policy", "status"]) or terminal.value.value.policy != GameConfig.RECOVERY_POLICY or not terminal.value.value.status is Dictionary or not store.validate_terminal_notice(terminal.value.value.status): return DuelResult.failure("STORE_CORRUPT")
 		terminal_status = terminal.value.value.status
+		if session_data.host and terminal_status.resultStatus == 1 and not store.state.is_terminal():
+			var finalized := store.persist_terminal_notice(terminal_status, true, int(session_data.epoch))
+			if not finalized.ok: return finalized
 		diagnostic_only = true
 	host = session_data.host
 	local_slot = 0 if host else 1
@@ -387,6 +392,10 @@ func _bind(peer: ENetPacketPeer) -> bool:
 
 func _send_to(peer: ENetPacketPeer, kind: int, data: Dictionary, channel: int, reliable: bool, forced_epoch: int = -1) -> void:
 	if not peers.has(peer): return
+	if OS.is_debug_build() and int(debug_drop_types.get(kind, 0)) > 0:
+		debug_drop_types[kind] -= 1
+		debug_dropped_types[kind] = int(debug_dropped_types.get(kind, 0)) + 1
+		return
 	var info: Dictionary = peers[peer]
 	if kind != 11 and kind not in ControlWire.TYPES: return
 	var payload := SnapshotCodec.encode(data) if kind == 11 else PackedByteArray()
@@ -526,7 +535,7 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 				if local_continuous and (recovery.remaining_ms() <= 0 or clock.is_uncertain()): _stop_conflict("RECOVERY_EXPIRED")
 				else: _finish_resume()
 			if store.state.is_terminal():
-				var indexed := profile.record_closed(store.state.match_id, 1, 2 if store.state.match_winner < 0 else 3)
+				var indexed := profile.record_closed(store.state.match_id, 1, 1 if store.state.terminal_reason == "DISCONNECT_TIMEOUT" else (2 if store.state.match_winner < 0 else 3))
 				if not indexed.ok:
 					_stop_conflict("STORE_WRITE_FAILED")
 					return
@@ -605,7 +614,8 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 			phase_changed.emit()
 			if host and rematch_ready == [true, true]: _new_rematch()
 		41:
-			if d.old_epoch == epoch: graceful_slot = 1 - local_slot
+			if d.old_epoch != epoch: return
+			graceful_slot = 1 - local_slot
 			_lost()
 		43:
 			if d.oldEpoch != _old_epoch(): return
@@ -617,14 +627,14 @@ func _dispatch(kind: int, d: Dictionary) -> void:
 			if d.requestId != status_request_id or d.oldEpoch != _old_epoch(): return
 			var notice := d.duplicate(true)
 			notice.erase("requestId")
-			if not RecoveryStatus.validate(notice, store.state):
+			if not store.validate_terminal_notice(notice):
 				_stop_conflict("HISTORY_FORK")
 				return
 			if notice.resultStatus == 1 and notice.offender != _offender(): return
 			if not terminal_status.is_empty() and (terminal_status.resultStatus != notice.resultStatus or terminal_status.winner != notice.winner):
 				_stop_conflict("RECOVERY_CONFLICT")
 				return
-			var saved := store.files.save_ab(store.root + "/terminal.json", {"policy": GameConfig.RECOVERY_POLICY, "status": notice})
+			var saved := store.persist_terminal_notice(notice, host, epoch)
 			if not saved.ok:
 				_stop_conflict("STORE_WRITE_FAILED")
 				return
@@ -682,7 +692,7 @@ func _after_ack(next: String) -> void:
 	match next:
 		"prepare":
 			if store.state.is_terminal():
-				var indexed := profile.record_closed(store.state.match_id, 1, 2 if store.state.match_winner < 0 else 3)
+				var indexed := profile.record_closed(store.state.match_id, 1, 1 if store.state.terminal_reason == "DISCONNECT_TIMEOUT" else (2 if store.state.match_winner < 0 else 3))
 				if not indexed.ok:
 					_stop_conflict("STORE_WRITE_FAILED")
 					return
@@ -910,6 +920,7 @@ func _action_frame(source: InputFrame) -> InputFrame:
 	return copy
 
 func _complete_action(id: int, code: int) -> void:
+	if action_ledger.pending.has(id) and (active_swap.is_empty() or active_swap.actionId != id): action_ledger.pending[id] = tick
 	var result := action_ledger.complete(id, code, world.simulation.players[1].inventory.revision, tick)
 	if result.ok: _send(21, result.value, 3)
 
@@ -976,6 +987,8 @@ func _resume_data() -> Dictionary:
 		"resume_block": terminal_status.get("resumeBlock", 0), "evidence": terminal_status.get("evidence", 1 if local_continuous else 0)}
 
 func _offender() -> int:
+	if terminal_status.get("resultStatus", 0) == 1 and store.validate_terminal_notice(terminal_status): return terminal_status.offender
+	if graceful_slot in [0, 1] and local_continuous and clock != null and not clock.is_uncertain(): return graceful_slot
 	if remote_resume.is_empty() or profile == null or not session_data.has_all(["host_boot", "guest_boot"]): return -1
 	var host_boot: PackedByteArray = profile.boot_id if host else remote_resume.get("boot", PackedByteArray())
 	var guest_boot: PackedByteArray = remote_resume.get("boot", PackedByteArray()) if host else profile.boot_id
@@ -1049,8 +1062,14 @@ func _stop_conflict(reason: String) -> void:
 	if reason in ["RECOVERY_EXPIRED", "RECOVERY_ACK_TIMEOUT"]:
 		recovery.expired = true
 	var boot := profile.boot_id if profile != null else DuelIds.random_bytes(16)
-	terminal_status = RecoveryStatus.create(store.state, maxi(1, _old_epoch()), boot, recovery.observation, reason, _offender())
-	var saved := store.files.save_ab(store.root + "/terminal.json", {"policy": GameConfig.RECOVERY_POLICY, "status": terminal_status})
+	if terminal_status.get("resultStatus", 0) in [1, 2, 3] and store.validate_terminal_notice(terminal_status):
+		terminal_status = terminal_status.duplicate(true)
+		if reason.begins_with("STORE"): terminal_status.resumeBlock = 4
+		elif reason == "CLOCK_UNCERTAIN": terminal_status.resumeBlock = 6
+		elif reason in ["HISTORY_FORK", "RECOVERY_CONFLICT"]: terminal_status.resumeBlock = 3
+	else:
+		terminal_status = RecoveryStatus.create(store.state, maxi(1, _old_epoch()), boot, recovery.observation, reason, _offender())
+	var saved := store.persist_terminal_notice(terminal_status, host, epoch)
 	if not saved.ok: reason = "STORE_WRITE_FAILED"
 	if saved.ok and profile != null and store.state.match_id.size() == 16:
 		if not profile.record_closed(store.state.match_id, terminal_status.resumeBlock, terminal_status.resultStatus).ok: reason = "STORE_WRITE_FAILED"

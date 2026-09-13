@@ -34,6 +34,28 @@ func test_event_batches_respect_bytes_and_count(a: DuelAssertions) -> void:
 	split = EventJournal.batches(events)
 	a.equal([split.value[0].size(), split.value[1].size()], [64, 1], "small events split at count cap")
 
+func test_history_digest_and_replay_buffer_bounds(a: DuelAssertions) -> void:
+	var sim := _sim()
+	var replica := EntityReplica.new()
+	replica.reset(1)
+	for seq in range(1, 1026):
+		replica.events({"round": 1, "firstEventSeq": seq, "serverTick": 100, "events": [EntityWire.tagged(8, {"slot": 0})]}, sim, 0)
+	a.equal(replica.history.size(), 1024, "past comparison retains only latest 1024 hashes")
+	a.truth(replica.history[1025] is PackedByteArray and replica.history[1025].size() == 32, "comparison entry is SHA256 rather than full payload")
+	a.equal(replica.replay_events.size(), 1024, "baseline replay has independent count limit")
+	replica.events({"round": 1, "firstEventSeq": 1, "serverTick": 100, "events": [EntityWire.tagged(8, {"slot": 1})]}, sim, 0)
+	a.truth(not replica.conflict, "older duplicate outside digest window is a no-op")
+	replica.reset(1)
+	var baseline: Dictionary = EntityWire.baseline(sim, 100, 1, 0).value
+	var cells: Array = []
+	for index in 81: cells.append(SnapshotCodec.vector(Vector3(index % 9, 0, index / 9)))
+	var event := EntityWire.tagged(7, {"id": 1, "owner": 0, "spawnTick": 100, "expiryTick": 400, "nextDamageTick": 115, "cells": cells})
+	for seq in range(1, 321): replica.events({"round": 1, "firstEventSeq": seq, "serverTick": 100, "events": [event]}, sim, 0)
+	a.truth(replica.replay_bytes <= 262144 and replica.replay_events.size() < 320, "large replay payloads evicted by byte budget")
+	a.truth(not replica.install(baseline, sim), "baseline older than retained payloads cannot partially rewind")
+	a.equal(replica.sequence, 320, "failed rewind preserves current event sequence")
+	a.equal(replica.request_reason, 1, "requests a fresh baseline when replay range was evicted")
+
 func test_generation_limits_do_not_consume_inventory(a: DuelAssertions) -> void:
 	var sim := _sim()
 	var player: PlayerState = sim.players[0]
@@ -147,3 +169,23 @@ func test_delayed_baseline_preserves_newer_motion(a: DuelAssertions) -> void:
 	a.truth(replica.install(next, sim), "newer baseline installed")
 	a.equal(replica.corrections.size(), 0, "queued corrections older than baseline discarded")
 	a.equal(sim.weapons.projectiles[0].position, Vector3(0, 0, -5), "obsolete queued correction cannot rewind state")
+
+func test_incomplete_replay_does_not_modify_pending(a: DuelAssertions) -> void:
+	var sim := _sim()
+	sim.round_number = 1
+	var baseline: Dictionary = EntityWire.baseline(sim, 100, 1, 0).value
+	var replica := EntityReplica.new()
+	replica.reset(1)
+	replica.sequence = 2
+	var event := EntityWire.tagged(2, {"id": 1, "reason": 1, "point": SnapshotCodec.vector(Vector3.ZERO), "normal": SnapshotCodec.vector(Vector3.UP)})
+	replica.replay_events[1] = {"event": event, "size": 32}
+	replica.replay_bytes = 32
+	replica.pending[4] = {"event": event, "time": Time.get_ticks_msec(), "size": 32}
+	replica.pending_bytes = 32
+	var before := replica.pending.duplicate(true)
+	a.truth(not replica.install(baseline, sim), "missing later replay event rejects baseline")
+	a.equal(replica.pending, before, "failed replay preflight leaves queue unchanged")
+	a.equal(replica.pending_bytes, 32, "failed baseline preserves queue accounting")
+	a.equal(replica.sequence, 2, "failed baseline preserves applied sequence")
+	a.equal(replica.baseline_id, 0, "failed baseline is not acknowledged")
+	a.equal(replica.request_reason, 1, "missing replay requests a fresh baseline")

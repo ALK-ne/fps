@@ -36,6 +36,11 @@ func test_local_expiry_is_durable(a: DuelAssertions) -> void:
 	a.equal(saved.value.value.status.resultStatus, 2, "approved abort without responsibility evidence")
 	a.equal(saved.value.value.status.seq, 1, "references confirmed history")
 	a.equal(session.store.state.scores, [0, 0], "no invented wins")
+	var notice_id: PackedByteArray = session.terminal_status.noticeId
+	session._stop_conflict("HISTORY_FORK")
+	a.equal(session.terminal_status.resultStatus, 2, "subsequent conflict preserves the existing outcome")
+	a.equal(session.terminal_status.noticeId, notice_id, "existing certificate is not replaced")
+	a.equal(session.terminal_status.resumeBlock, 3, "history conflict is a separate interlock")
 
 func test_terminal_write_failure_is_visible(a: DuelAssertions) -> void:
 	var path := "user://tests/blocked_" + DuelIds.random_bytes(6).hex_encode()

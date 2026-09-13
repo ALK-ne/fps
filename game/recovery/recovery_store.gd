@@ -150,6 +150,38 @@ func append_transaction(events: Array) -> DuelResult:
 func persist_observation(observation: Dictionary) -> DuelResult:
 	return files.save_ab(root + "/observations/%d.json" % observation.old_epoch, observation)
 
+func validate_terminal_notice(notice: Dictionary) -> bool:
+	if not notice.has_all(["resultStatus", "winner", "oldEpoch"]): return false
+	if state.is_terminal():
+		var expected: int = {"TEN_WINS": 3, "DISCONNECT_TIMEOUT": 1, "RESPONSIBILITY_UNKNOWN": 2}.get(state.terminal_reason, 0)
+		if notice.resultStatus != expected or notice.winner != state.match_winner: return false
+	elif notice.resultStatus == 1 and notice.oldEpoch <= state.last_recovery_epoch:
+		return false
+	if RecoveryStatus.validate(notice, state): return true
+	# A forfeit certificate refers to the common prefix, before the host-only record.
+	if state.terminal_reason != "DISCONNECT_TIMEOUT" or not notice.has_all(["seq", "hash", "oldEpoch", "offender", "winner", "resultStatus"]) or notice.resultStatus != 1 or notice.seq != state.last_seq - 1 or notice.winner != state.match_winner: return false
+	var record := decode_record(AtomicFiles.read_bounded(root + "/records/%016d.bin" % state.last_seq, 8192))
+	if not record.ok or record.value.event.type != 5: return false
+	var p: Dictionary = record.value.event.payload
+	if p.disposition != 2 or p.old_epoch != notice.oldEpoch or p.offender != notice.offender or record.value.previous != notice.hash: return false
+	var prefix := state.clone()
+	prefix.last_seq = notice.seq
+	prefix.last_hash = record.value.previous
+	prefix.terminal_reason = ""
+	prefix.match_winner = -1
+	return RecoveryStatus.validate(notice, prefix)
+
+func persist_terminal_notice(notice: Dictionary, authoritative_host: bool, connection_epoch: int) -> DuelResult:
+	if not validate_terminal_notice(notice): return DuelResult.failure("HISTORY_FORK")
+	# Save the proof first; after interruption the host can idempotently finish its record.
+	var saved := files.save_ab(root + "/terminal.json", {"policy": GameConfig.RECOVERY_POLICY, "status": notice})
+	if not saved.ok: return saved
+	if not authoritative_host or notice.resultStatus != 1 or state.is_terminal(): return DuelResult.success()
+	var highwater := maxi(state.epoch_high_water, connection_epoch)
+	if highwater >= 0xffffffff: return DuelResult.failure("EPOCH_EXHAUSTED")
+	return append_transaction([MatchEvent.make(5, {"round": state.round, "old_epoch": notice.oldEpoch, "new_epoch": highwater + 1,
+		"recovery_id": DuelIds.recovery_id(state.match_id, notice.oldEpoch).hex_encode(), "offender": notice.offender, "disposition": 2})])
+
 func prune_observations() -> DuelResult:
 	# Only a durable recovery receipt authorizes deleting resolved observations.
 	if state.last_recovery_epoch < 1: return DuelResult.success()

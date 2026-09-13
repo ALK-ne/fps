@@ -75,7 +75,7 @@ static func decoded(kind: int, data: Dictionary) -> DuelResult:
 						if ids.has(entity.id) or not _entity(pair[1], entity): return DuelResult.failure("INVALID_ENTITY")
 						ids[entity.id] = true
 		22:
-			if data.firstEventSeq < 1: return DuelResult.failure("INVALID_EVENT_SEQ")
+			if data.firstEventSeq < 1 or data.firstEventSeq > 0x7fffffffffffffff - maxi(0, data.events.size() - 1): return DuelResult.failure("INVALID_EVENT_SEQ")
 			for event in data.events:
 				var p: Dictionary = event.payload
 				match int(event.type):
